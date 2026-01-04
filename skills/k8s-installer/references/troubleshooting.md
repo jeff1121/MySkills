@@ -113,18 +113,28 @@
 ```
 原因：CNI 網路外掛未安裝或異常
 解決：
-  1. 確認 Flannel 已安裝
-  2. 檢查 Pod 狀態：kubectl get pods -n kube-flannel
-  3. 查看日誌：kubectl logs -n kube-flannel -l app=flannel
+  1. 確認 Calico 已安裝
+  2. 檢查 Pod 狀態：kubectl get pods -n calico-system
+  3. 查看日誌：kubectl logs -n calico-system -l k8s-app=calico-node
 ```
 
 ### Pod 無法通訊
 ```
 原因：網路設定問題
 解決：
-  1. 確認 Pod CIDR 與 Flannel 設定一致
+  1. 確認 Pod CIDR 與 Calico 設定一致（預設 192.168.0.0/16）
   2. 檢查 iptables 規則
   3. 確認 kube-proxy 運作中
+```
+
+### MetalLB Service 無法取得 External IP
+```
+原因：MetalLB 未正確設定或 IP Pool 耗盡
+解決：
+  1. 確認 MetalLB 已安裝：kubectl get pods -n metallb-system
+  2. 確認 IPAddressPool 已設定：kubectl get ipaddresspool -n metallb-system
+  3. 確認 strictARP 已啟用
+  4. 檢查 IP 範圍是否與節點網段在同一子網路
 ```
 
 ## 重置叢集
@@ -140,6 +150,13 @@ rm -rf /var/lib/etcd/
 rm -rf /etc/cni/net.d/
 rm -rf $HOME/.kube/
 
+# 清除 Calico 資源（如有安裝）
+kubectl delete -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+kubectl delete -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+
+# 清除 MetalLB 資源（如有安裝）
+kubectl delete -f https://raw.githubusercontent.com/metallb/metallb/v0.14.3/config/manifests/metallb-native.yaml
+
 # 清除 iptables 規則
 iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
 ```
@@ -152,3 +169,5 @@ iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
 | containerd | `journalctl -xeu containerd` |
 | kube-apiserver | `kubectl logs -n kube-system kube-apiserver-<node>` |
 | etcd | `kubectl logs -n kube-system etcd-<node>` |
+| calico-node | `kubectl logs -n calico-system -l k8s-app=calico-node` |
+| metallb | `kubectl logs -n metallb-system -l app=metallb` |

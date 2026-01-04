@@ -7,7 +7,7 @@ description: 自動化安裝 Kubernetes 叢集。當使用者要求安裝 K8S、
 
 ## Overview
 
-自動化安裝 Kubernetes 高可用（HA）叢集的 AI Agent Skill。預設配置為 5 個節點：3 個 Master（Control Plane）+ 2 個 Worker。透過 SSH 連線到目標 Linux 節點，依序執行前置作業、安裝 containerd 與 kubeadm 套件、初始化 HA Control Plane、安裝 Flannel CNI 網路外掛，並將 Worker 節點加入叢集。
+自動化安裝 Kubernetes 高可用（HA）叢集的 AI Agent Skill。預設配置為 5 個節點：3 個 Master（Control Plane）+ 2 個 Worker。透過 SSH 連線到目標 Linux 節點，依序執行前置作業、安裝 containerd 與 kubeadm 套件、初始化 HA Control Plane、安裝 Calico CNI 網路外掛與 MetalLB LoadBalancer，並將 Worker 節點加入叢集。
 
 ## When to Use This Skill
 
@@ -47,7 +47,8 @@ description: 自動化安裝 Kubernetes 叢集。當使用者要求安裝 K8S、
 | master_nodes | list | ✓ | Master 節點列表（預設 3 個），每個包含 host、user、password |
 | worker_nodes | list | ✓ | Worker 節點列表（預設 2 個），每個包含 host、user、password |
 | load_balancer_ip | string | | Load Balancer IP（HA 架構建議設定） |
-| pod_network_cidr | string | | Pod 網路 CIDR，預設 10.244.0.0/16 |
+| pod_network_cidr | string | | Pod 網路 CIDR，預設 192.168.0.0/16（Calico 預設） |
+| metallb_ip_range | string | | MetalLB IP 位址範圍，例如 192.168.1.200-192.168.1.250 |
 
 ### 預設節點配置
 
@@ -99,7 +100,10 @@ description: 自動化安裝 Kubernetes 叢集。當使用者要求安裝 K8S、
 Load Balancer IP（指向 3 個 Master 的 6443 port）: 
 
 === 網路設定（選填）===
-Pod 網路 CIDR？（預設 10.244.0.0/16）
+Pod 網路 CIDR？（預設 192.168.0.0/16，Calico 預設）
+
+=== MetalLB 設定（選填）===
+MetalLB IP 位址範圍？（例如 192.168.1.200-192.168.1.250）
 ```
 
 ## Execution Workflow
@@ -202,9 +206,16 @@ cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-**4.3 安裝 Flannel CNI**
+**4.3 安裝 Calico CNI**
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+# 安裝 Calico operator
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+
+# 安裝 Calico 自訂資源
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+
+# 等待 Calico 就緒
+kubectl wait --for=condition=Ready pods -l k8s-app=calico-node -n calico-system --timeout=300s
 ```
 
 **4.4 記錄 Join 命令**
@@ -239,7 +250,50 @@ kubeadm join {endpoint}:6443 --token {token} \
   --discovery-token-ca-cert-hash sha256:{hash}
 ```
 
-### Step 7: 驗證安裝
+### Step 7: 安裝 MetalLB LoadBalancer
+
+在任一 Master 執行：
+
+**7.1 啟用 strictARP**
+```bash
+# MetalLB 需要啟用 strictARP
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed -e 's/strictARP: false/strictARP: true/' | \
+  kubectl apply -f - -n kube-system
+```
+
+**7.2 安裝 MetalLB**
+```bash
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.3/config/manifests/metallb-native.yaml
+
+# 等待 MetalLB 就緒
+kubectl wait --for=condition=Ready pods -l app=metallb -n metallb-system --timeout=120s
+```
+
+**7.3 設定 IP 位址池**
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - {metallb_ip_range}  # 例如: 192.168.1.200-192.168.1.250
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - default-pool
+EOF
+```
+
+### Step 8: 驗證安裝
 
 在任一 Master 執行：
 ```bash
@@ -263,6 +317,19 @@ kubectl get pods -n kube-system -l component=etcd
 
 預期有 3 個 etcd Pod 運行中。
 
+檢查 Calico CNI 狀態：
+```bash
+kubectl get pods -n calico-system
+```
+
+預期所有 calico-node Pod 都為 Running。
+
+檢查 MetalLB 狀態：
+```bash
+kubectl get pods -n metallb-system
+kubectl get ipaddresspool -n metallb-system
+```
+
 ## Output
 
 安裝完成後，回報以下資訊給使用者：
@@ -276,6 +343,8 @@ kubectl get pods -n kube-system -l component=etcd
 - Worker 節點：2 個（worker-1, worker-2）
 - Control Plane Endpoint: {endpoint}
 - Pod 網路: {pod_network_cidr}
+- CNI: Calico
+- LoadBalancer: MetalLB（IP 範圍: {metallb_ip_range}）
 - Kubernetes 版本: v1.29.0
 
 📋 Join 命令（供未來新增節點使用）：
@@ -292,8 +361,10 @@ kubeadm join {endpoint}:6443 --token {token} \
 下一步：
 1. SSH 登入任一 Master: ssh {user}@{master_ip}
 2. 檢查節點狀態: kubectl get nodes
-3. 檢查 etcd 狀態: kubectl get pods -n kube-system -l component=etcd
-4. 部署第一個應用: kubectl create deployment nginx --image=nginx
+3. 檢查 Calico 狀態: kubectl get pods -n calico-system
+4. 檢查 MetalLB 狀態: kubectl get pods -n metallb-system
+5. 部署第一個應用: kubectl create deployment nginx --image=nginx
+6. 建立 LoadBalancer Service: kubectl expose deployment nginx --type=LoadBalancer --port=80
 ```
 
 ## Error Handling

@@ -51,7 +51,7 @@ AI 會讀取 SKILL.md，然後：
 
 | Skill | 說明 |
 |-------|------|
-| [k8s-installer](skills/k8s-installer/SKILL.md) | 自動化安裝 Kubernetes 叢集 |
+| [k8s-installer](skills/k8s-installer/SKILL.md) | 自動化安裝 Kubernetes HA 叢集（Calico CNI + MetalLB LoadBalancer） |
 
 ## 建立新的 Skill
 
