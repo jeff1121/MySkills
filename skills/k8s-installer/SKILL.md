@@ -7,7 +7,7 @@ description: 自動化安裝 Kubernetes 叢集。當使用者要求安裝 K8S、
 
 ## Overview
 
-自動化安裝 Kubernetes 叢集的 AI Agent Skill。透過 SSH 連線到目標 Linux 節點，依序執行前置作業、安裝 containerd 與 kubeadm 套件、初始化 Control Plane、安裝 Flannel CNI 網路外掛，並將 Worker 節點加入叢集。
+自動化安裝 Kubernetes 高可用（HA）叢集的 AI Agent Skill。預設配置為 5 個節點：3 個 Master（Control Plane）+ 2 個 Worker。透過 SSH 連線到目標 Linux 節點，依序執行前置作業、安裝 containerd 與 kubeadm 套件、初始化 HA Control Plane、安裝 Flannel CNI 網路外掛，並將 Worker 節點加入叢集。
 
 ## When to Use This Skill
 
@@ -25,41 +25,81 @@ description: 自動化安裝 Kubernetes 叢集。當使用者要求安裝 K8S、
 - 需要 `paramiko`（SSH）、`click`（CLI）、`pyyaml`（設定檔）套件
 
 ### 目標節點（要安裝 K8S 的伺服器）
+- **5 個節點**（預設配置）：
+  - master-1, master-2, master-3（Control Plane HA）
+  - worker-1, worker-2（Worker 節點）
 - Oracle Linux 9+ 或其他 RHEL 相容系統
 - 每節點至少 2 CPU、2GB RAM
-- 節點間網路互通（Control Plane 需開放 6443 port）
+- 節點間網路互通
+- 必要 Port：
+  - Control Plane：6443, 2379-2380, 10250, 10259, 10257
+  - Worker：10250, 30000-32767
 - SSH 存取權限（root 或具 sudo 權限的使用者）
 - 需要 internet 連線以下載套件
+- **建議**：設定 Load Balancer 指向 3 個 Master 的 6443 port
 
 ## Parameters
 
-向使用者收集以下資訊：
+向使用者收集以下資訊（預設 5 節點 HA 架構）：
 
 | 參數 | 類型 | 必填 | 說明 |
 |------|------|------|------|
-| control_plane_host | string | ✓ | Control Plane 節點的 IP 位址或域名 |
-| control_plane_user | string | ✓ | SSH 使用者名稱 |
-| control_plane_password | string | ✓ | SSH 密碼（敏感資訊，不要顯示） |
-| control_plane_port | int | | SSH 連接埠，預設 22 |
-| worker_nodes | list | ✓ | Worker 節點列表，每個包含 host、user、password |
+| master_nodes | list | ✓ | Master 節點列表（預設 3 個），每個包含 host、user、password |
+| worker_nodes | list | ✓ | Worker 節點列表（預設 2 個），每個包含 host、user、password |
+| load_balancer_ip | string | | Load Balancer IP（HA 架構建議設定） |
 | pod_network_cidr | string | | Pod 網路 CIDR，預設 10.244.0.0/16 |
+
+### 預設節點配置
+
+| 節點 | 角色 | 說明 |
+|------|------|------|
+| node-1 | master-1 | 第一個 Control Plane（初始化節點） |
+| node-2 | master-2 | 第二個 Control Plane |
+| node-3 | master-3 | 第三個 Control Plane |
+| node-4 | worker-1 | 第一個 Worker 節點 |
+| node-5 | worker-2 | 第二個 Worker 節點 |
 
 ### 參數收集對話範例
 
 ```
-我需要以下資訊來安裝 K8S 叢集：
+我需要以下資訊來安裝 K8S HA 叢集（3 Master + 2 Worker）：
 
-=== Control Plane 節點 ===
-1. Control Plane 的 IP 位址是什麼？
-2. SSH 使用者名稱？（例如：root）
-3. SSH 密碼？
+=== Master 節點（Control Plane HA）===
+請提供 3 個 Master 節點的連線資訊：
+
+--- master-1（初始化節點）---
+  IP 位址: 
+  SSH 使用者: root
+  SSH 密碼: 
+
+--- master-2 ---
+  IP 位址: 
+  SSH 使用者: root
+  SSH 密碼: 
+
+--- master-3 ---
+  IP 位址: 
+  SSH 使用者: root
+  SSH 密碼: 
 
 === Worker 節點 ===
-4. 有幾個 Worker 節點要加入？
-5. 請提供每個 Worker 的 IP、使用者名稱、密碼
+請提供 2 個 Worker 節點的連線資訊：
+
+--- worker-1 ---
+  IP 位址: 
+  SSH 使用者: root
+  SSH 密碼: 
+
+--- worker-2 ---
+  IP 位址: 
+  SSH 使用者: root
+  SSH 密碼: 
+
+=== Load Balancer（選填但建議）===
+Load Balancer IP（指向 3 個 Master 的 6443 port）: 
 
 === 網路設定（選填）===
-6. Pod 網路 CIDR？（預設 10.244.0.0/16）
+Pod 網路 CIDR？（預設 10.244.0.0/16）
 ```
 
 ## Execution Workflow
@@ -136,13 +176,23 @@ dnf install -y kubelet kubeadm kubectl
 systemctl enable --now kubelet
 ```
 
-### Step 4: 初始化 Control Plane
+### Step 4: 初始化第一個 Master（master-1）
 
-僅在 Control Plane 節點執行：
+僅在 master-1 執行：
 
-**4.1 執行 kubeadm init**
+**4.1 執行 kubeadm init（HA 模式）**
 ```bash
-kubeadm init --pod-network-cidr={pod_network_cidr}
+# 如果有 Load Balancer
+kubeadm init \
+  --control-plane-endpoint "{load_balancer_ip}:6443" \
+  --upload-certs \
+  --pod-network-cidr={pod_network_cidr}
+
+# 如果沒有 Load Balancer，使用 master-1 IP
+kubeadm init \
+  --control-plane-endpoint "{master1_ip}:6443" \
+  --upload-certs \
+  --pod-network-cidr={pod_network_cidr}
 ```
 
 **4.2 設定 kubectl**
@@ -157,53 +207,93 @@ chown $(id -u):$(id -g) $HOME/.kube/config
 kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
 ```
 
-### Step 5: Worker 加入叢集
+**4.4 記錄 Join 命令**
 
-**5.1 從 Control Plane 取得 Join 命令**
+kubeadm init 完成後會輸出兩個 join 命令：
+- Control Plane join 命令（含 `--control-plane --certificate-key`）
+- Worker join 命令
+
+### Step 5: 加入其他 Master（master-2, master-3）
+
+在 master-2 和 master-3 執行 Control Plane join 命令：
+
 ```bash
-kubeadm token create --print-join-command
+kubeadm join {endpoint}:6443 --token {token} \
+  --discovery-token-ca-cert-hash sha256:{hash} \
+  --control-plane --certificate-key {cert_key}
 ```
 
-**5.2 在每個 Worker 執行 Join 命令**
+完成後在每個 Master 設定 kubectl：
 ```bash
-kubeadm join {control_plane_ip}:6443 --token {token} --discovery-token-ca-cert-hash sha256:{hash}
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-### Step 6: 驗證安裝
+### Step 6: Worker 加入叢集（worker-1, worker-2）
 
-在 Control Plane 執行：
+在 worker-1 和 worker-2 執行 Worker join 命令：
+
+```bash
+kubeadm join {endpoint}:6443 --token {token} \
+  --discovery-token-ca-cert-hash sha256:{hash}
+```
+
+### Step 7: 驗證安裝
+
+在任一 Master 執行：
 ```bash
 kubectl get nodes
 ```
 
-預期輸出：
+預期輸出（5 節點 HA 叢集）：
 ```
-NAME      STATUS   ROLES           AGE   VERSION
-master    Ready    control-plane   5m    v1.29.0
-worker1   Ready    <none>          3m    v1.29.0
-worker2   Ready    <none>          3m    v1.29.0
+NAME       STATUS   ROLES           AGE   VERSION
+master-1   Ready    control-plane   10m   v1.29.0
+master-2   Ready    control-plane   8m    v1.29.0
+master-3   Ready    control-plane   6m    v1.29.0
+worker-1   Ready    <none>          4m    v1.29.0
+worker-2   Ready    <none>          3m    v1.29.0
 ```
+
+檢查 etcd 叢集狀態：
+```bash
+kubectl get pods -n kube-system -l component=etcd
+```
+
+預期有 3 個 etcd Pod 運行中。
 
 ## Output
 
 安裝完成後，回報以下資訊給使用者：
 
 ```
-✅ K8S 叢集安裝完成！
+✅ K8S HA 叢集安裝完成！
 
 叢集資訊：
-- Control Plane: {control_plane_ip}
-- Worker 節點: {worker_count} 個
+- 架構：High Availability（HA）
+- Master 節點：3 個（master-1, master-2, master-3）
+- Worker 節點：2 個（worker-1, worker-2）
+- Control Plane Endpoint: {endpoint}
 - Pod 網路: {pod_network_cidr}
 - Kubernetes 版本: v1.29.0
 
-📋 Join 命令（供未來新增 Worker 使用）：
-kubeadm join {control_plane_ip}:6443 --token {token} --discovery-token-ca-cert-hash sha256:{hash}
+📋 Join 命令（供未來新增節點使用）：
+
+# 新增 Master（Control Plane）
+kubeadm join {endpoint}:6443 --token {token} \
+  --discovery-token-ca-cert-hash sha256:{hash} \
+  --control-plane --certificate-key {cert_key}
+
+# 新增 Worker
+kubeadm join {endpoint}:6443 --token {token} \
+  --discovery-token-ca-cert-hash sha256:{hash}
 
 下一步：
-1. SSH 登入 Control Plane: ssh {user}@{control_plane_ip}
+1. SSH 登入任一 Master: ssh {user}@{master_ip}
 2. 檢查節點狀態: kubectl get nodes
-3. 部署第一個應用: kubectl create deployment nginx --image=nginx
+3. 檢查 etcd 狀態: kubectl get pods -n kube-system -l component=etcd
+4. 部署第一個應用: kubectl create deployment nginx --image=nginx
 ```
 
 ## Error Handling
