@@ -18,7 +18,7 @@ parameters:
   - name: pod_network_cidr
     type: string
     required: false
-    default: "10.244.0.0/16"
+    default: "10.168.0.0/16"
     description: Pod 網路 CIDR 範圍
 
 # Node 型別的子結構
