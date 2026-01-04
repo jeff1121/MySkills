@@ -11,7 +11,7 @@
 
 ### 目標節點（要安裝 K8S 的伺服器）
 
-- Ubuntu 22.04 LTS 或 Debian 11+
+- Oracle Linux 9+
 - 每節點至少 2 CPU、2GB RAM
 - 節點間網路互通
 - SSH 存取權限（root 或具 sudo 權限的使用者）
@@ -19,51 +19,81 @@
 ## 安裝步驟
 
 ```bash
-# 1. 進入 Skill 目錄
-cd K8S-Installer
+# 1. 進入專案根目錄
+cd MySkills
 
-# 2. 安裝 Python 依賴套件
+# 2. 安裝框架依賴
 pip install -r requirements.txt
+
+# 3. 安裝 K8S-Installer 依賴
+pip install -r K8S-Installer/requirements.txt
 ```
 
 ## 使用方式
 
-### 方式一：互動模式（推薦新手）
+### 方式一：透過 Skill Installer 框架（推薦）
 
 ```bash
+# 列出可用的 Skills
+python skill_installer.py list
+
+# 執行 K8S-Installer
+python skill_installer.py run K8S-Installer
+```
+
+系統會根據 `skill.yaml` 定義的參數，自動引導你輸入：
+
+```
+📦 k8s-installer - K8S 安裝設定代理 - 自動化 Kubernetes 叢集安裝
+
+=== Control Plane (Master) 節點連線資訊 ===
+  主機 IP 地址或域名: 192.168.1.100
+  SSH 連接埠 [22]: ↵
+  SSH 使用者名稱: root
+  SSH 密碼: ********
+
+=== Worker 節點連線資訊列表（建議 1-10 個） ===
+  節點數量: 2
+
+--- 節點 1 ---
+  主機 IP 地址或域名: 192.168.1.101
+  SSH 連接埠 [22]: ↵
+  SSH 使用者名稱: root
+  SSH 密碼: ********
+
+--- 節點 2 ---
+  主機 IP 地址或域名: 192.168.1.102
+  SSH 連接埠 [22]: ↵
+  SSH 使用者名稱: root
+  SSH 密碼: ********
+
+  Pod 網路 CIDR 範圍 [10.168.0.0/16]: ↵
+
+==================================================
+即將執行安裝，參數如下：
+  control_plane:
+    host: 192.168.1.100
+    port: 22
+    user: root
+    password: ********
+  workers:
+    [1]
+      host: 192.168.1.101
+      ...
+
+確認開始執行？ [y/N]: y
+
+🚀 開始執行...
+```
+
+### 方式二：直接執行 K8S-Installer CLI
+
+```bash
+cd K8S-Installer
 python main.py install
 ```
 
-系統會逐步引導你輸入節點連線資訊：
-
-```
-📦 K8S-Installer - Kubernetes 叢集安裝工具
-
-=== Control Plane 節點設定 ===
-  主機位址: 192.168.1.100
-  SSH 連接埠 [22]: ↵
-  SSH 使用者: root
-  SSH 密碼: ********
-
-=== Worker 節點設定 ===
-Worker 節點數量 [1]: 2
-
---- Worker 1 ---
-  主機位址: 192.168.1.101
-  SSH 連接埠 [22]: ↵
-  SSH 使用者: root
-  SSH 密碼: ********
-
---- Worker 2 ---
-  主機位址: 192.168.1.102
-  SSH 連接埠 [22]: ↵
-  SSH 使用者: root
-  SSH 密碼: ********
-
-確認開始安裝？ [y/N]: y
-```
-
-### 方式二：設定檔模式（適合自動化）
+### 方式三：設定檔模式（適合自動化）
 
 1. 建立 `cluster.yaml` 設定檔：
 

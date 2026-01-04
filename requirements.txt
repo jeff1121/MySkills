@@ -1,0 +1,3 @@
+# Skill Installer 框架依賴
+click>=8.0.0
+pyyaml>=6.0

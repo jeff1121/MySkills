@@ -237,5 +237,59 @@ def validate(config: Optional[Path]) -> None:
         sys.exit(1)
 
 
+# === Skill Installer 框架介面 ===
+# 當被 skill-installer 呼叫時，會執行此函式
+
+def run(params: dict) -> None:
+    """
+    Skill 執行入口（供 skill-installer 框架呼叫）
+    
+    Args:
+        params: 從對話式介面收集的參數，結構對應 skill.yaml 定義
+            - control_plane: dict (host, port, user, password)
+            - workers: list[dict]
+            - pod_network_cidr: str (optional)
+    """
+    from models import NodeConnection, ClusterConfig
+    from installer import run_installation
+    from prompts import show_success, show_error
+    import click
+    
+    # 轉換參數為內部資料結構
+    cp_data = params["control_plane"]
+    control_plane = NodeConnection(
+        host=cp_data["host"],
+        port=cp_data.get("port", 22),
+        user=cp_data["user"],
+        password=cp_data.get("password"),
+    )
+    
+    workers = []
+    for w_data in params.get("workers", []):
+        workers.append(NodeConnection(
+            host=w_data["host"],
+            port=w_data.get("port", 22),
+            user=w_data["user"],
+            password=w_data.get("password"),
+        ))
+    
+    cluster_config = ClusterConfig(
+        control_plane=control_plane,
+        workers=workers,
+        pod_network_cidr=params.get("pod_network_cidr", "10.244.0.0/16"),
+    )
+    
+    # 執行安裝
+    result = run_installation(cluster_config, verbose=True)
+    
+    # 輸出結果
+    if result.success:
+        show_success(result.message)
+        if result.join_command:
+            click.echo(f"\n📋 Join 命令：\n{result.join_command}")
+    else:
+        show_error(result.message, result.error)
+
+
 if __name__ == "__main__":
     cli()
