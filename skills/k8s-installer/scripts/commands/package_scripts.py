@@ -9,18 +9,17 @@ def get_install_containerd_script() -> str:
     """取得安裝 containerd 的腳本"""
     return """
 # 安裝 containerd
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq containerd
+dnf install -y dnf-plugins-core
+dnf config-manager --enable ol9_addons || true
+dnf install -y containerd
 
 # 設定 containerd
 mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml > /dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
-# 重啟 containerd
-systemctl restart containerd
-systemctl enable containerd
+# 啟動 containerd
+systemctl enable --now containerd
 
 echo "Containerd installed and configured"
 """.strip()
@@ -29,22 +28,19 @@ echo "Containerd installed and configured"
 def get_install_kubernetes_packages_script() -> str:
     """取得安裝 Kubernetes 套件的腳本"""
     return """
-# 安裝必要的套件
-export DEBIAN_FRONTEND=noninteractive
-apt-get install -y -qq apt-transport-https ca-certificates curl gpg
-
-# 新增 Kubernetes APT repository
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg 2>/dev/null
-
-echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+# 新增 Kubernetes YUM repository
+cat <<EOF | tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+EOF
 
 # 安裝 kubelet, kubeadm, kubectl
-apt-get update -qq
-apt-get install -y -qq kubelet kubeadm kubectl
-
-# 固定版本，避免自動更新
-apt-mark hold kubelet kubeadm kubectl
+dnf install -y kubelet kubeadm kubectl
+systemctl enable --now kubelet
 
 echo "Kubernetes packages installed"
 """.strip()

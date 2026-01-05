@@ -70,27 +70,42 @@ def parse_cluster_config(data: dict) -> ClusterConfig:
     if not isinstance(data, dict):
         raise ConfigValidationError("設定檔格式錯誤：根元素必須是物件")
     
-    # 解析 Control Plane
-    if "control_plane" not in data:
-        raise ConfigValidationError("缺少必要欄位：control_plane")
-    
-    control_plane = parse_node_connection(data["control_plane"], "control_plane")
-    
+    # 解析 Master 節點
+    master_nodes = []
+    if "master_nodes" in data:
+        if not isinstance(data["master_nodes"], list):
+            raise ConfigValidationError("master_nodes 必須是陣列")
+        for i, master_data in enumerate(data["master_nodes"]):
+            master_nodes.append(
+                parse_node_connection(master_data, f"master_nodes[{i}]")
+            )
+    elif "control_plane" in data:
+        master_nodes = [parse_node_connection(data["control_plane"], "control_plane")]
+    else:
+        raise ConfigValidationError("缺少必要欄位：master_nodes")
+
     # 解析 Workers
     workers = []
-    if "workers" in data:
-        if not isinstance(data["workers"], list):
-            raise ConfigValidationError("workers 必須是陣列")
-        for i, worker_data in enumerate(data["workers"]):
-            workers.append(parse_node_connection(worker_data, f"workers[{i}]"))
-    
-    # 解析 Pod Network CIDR
-    pod_network_cidr = data.get("pod_network_cidr", "10.244.0.0/16")
-    
+    worker_data_list = data.get("worker_nodes", data.get("workers", []))
+    if worker_data_list:
+        if not isinstance(worker_data_list, list):
+            raise ConfigValidationError("worker_nodes 必須是陣列")
+        for i, worker_data in enumerate(worker_data_list):
+            workers.append(
+                parse_node_connection(worker_data, f"worker_nodes[{i}]")
+            )
+
+    # 解析其他參數
+    load_balancer_ip = data.get("load_balancer_ip")
+    pod_network_cidr = data.get("pod_network_cidr", "192.168.0.0/16")
+    metallb_ip_range = data.get("metallb_ip_range")
+
     config = ClusterConfig(
-        control_plane=control_plane,
-        workers=workers,
+        master_nodes=master_nodes,
+        worker_nodes=workers,
+        load_balancer_ip=load_balancer_ip,
         pod_network_cidr=pod_network_cidr,
+        metallb_ip_range=metallb_ip_range,
     )
     
     # 驗證配置
@@ -142,22 +157,27 @@ def save_cluster_config(config: ClusterConfig, config_path: str) -> None:
         config_path: 儲存路徑
     """
     data = {
-        "control_plane": {
-            "host": config.control_plane.host,
-            "port": config.control_plane.port,
-            "user": config.control_plane.user,
-            "password": config.control_plane.password,
-        },
-        "workers": [
+        "master_nodes": [
+            {
+                "host": m.host,
+                "port": m.port,
+                "user": m.user,
+                "password": m.password,
+            }
+            for m in config.master_nodes
+        ],
+        "worker_nodes": [
             {
                 "host": w.host,
                 "port": w.port,
                 "user": w.user,
                 "password": w.password,
             }
-            for w in config.workers
+            for w in config.worker_nodes
         ],
+        "load_balancer_ip": config.load_balancer_ip,
         "pod_network_cidr": config.pod_network_cidr,
+        "metallb_ip_range": config.metallb_ip_range,
     }
     
     with open(config_path, "w", encoding="utf-8") as f:

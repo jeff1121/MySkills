@@ -16,9 +16,11 @@ from .package_scripts import (
 )
 from .cluster_scripts import (
     get_kubeadm_init_script,
-    get_install_flannel_script,
+    get_install_calico_script,
     get_generate_join_command_script,
+    get_master_join_script,
     get_worker_join_script,
+    get_install_metallb_script,
     get_check_cluster_status_script,
     CLUSTER_STEPS,
 )
@@ -37,9 +39,11 @@ __all__ = [
     "PACKAGE_STEPS",
     # cluster_scripts
     "get_kubeadm_init_script",
-    "get_install_flannel_script",
+    "get_install_calico_script",
     "get_generate_join_command_script",
+    "get_master_join_script",
     "get_worker_join_script",
+    "get_install_metallb_script",
     "get_check_cluster_status_script",
     "CLUSTER_STEPS",
 ]

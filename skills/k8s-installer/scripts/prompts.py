@@ -34,7 +34,10 @@ def collect_node_info(node_name: str, default_port: int = 22) -> NodeConnection:
     )
 
 
-def collect_cluster_nodes(default_worker_count: int = 4) -> ClusterConfig:
+def collect_cluster_nodes(
+    default_master_count: int = 3,
+    default_worker_count: int = 2,
+) -> ClusterConfig:
     """
     收集完整叢集節點資訊
     
@@ -48,35 +51,62 @@ def collect_cluster_nodes(default_worker_count: int = 4) -> ClusterConfig:
     click.echo("📦 K8S-Installer - Kubernetes 叢集安裝工具")
     click.echo("=" * 50)
     
-    # Control Plane
-    click.echo("\n=== Control Plane 節點設定 ===")
-    control_plane = collect_node_info("Control Plane (Master)")
-    
+    # Masters
+    click.echo("\n=== Master 節點設定 ===")
+    master_count = click.prompt(
+        "Master 節點數量",
+        type=int,
+        default=default_master_count,
+    )
+    masters = []
+    for i in range(master_count):
+        click.echo(f"\n--- Master {i + 1} ---")
+        masters.append(collect_node_info(f"Master {i + 1}"))
+
     # Workers
     click.echo("\n=== Worker 節點設定 ===")
     worker_count = click.prompt(
-        "Worker 節點數量", 
-        type=int, 
-        default=default_worker_count
+        "Worker 節點數量",
+        type=int,
+        default=default_worker_count,
     )
-    
     workers = []
     for i in range(worker_count):
         click.echo(f"\n--- Worker {i + 1} ---")
         workers.append(collect_node_info(f"Worker {i + 1}"))
-    
+
+    # Load Balancer
+    click.echo("\n=== Load Balancer（選填但建議）===")
+    load_balancer_ip = click.prompt(
+        "Load Balancer IP（指向 3 個 Master 的 6443 port）",
+        type=str,
+        default="",
+        show_default=False,
+    ).strip() or None
+
     # Pod Network CIDR
     click.echo("\n=== 網路設定 ===")
     pod_network_cidr = click.prompt(
-        "Pod Network CIDR", 
-        type=str, 
-        default="10.244.0.0/16"
+        "Pod Network CIDR",
+        type=str,
+        default="192.168.0.0/16",
     )
-    
+
+    # MetalLB
+    click.echo("\n=== MetalLB 設定（選填）===")
+    metallb_ip_range = click.prompt(
+        "MetalLB IP 位址範圍（例如 192.168.1.200-192.168.1.250）",
+        type=str,
+        default="",
+        show_default=False,
+    ).strip() or None
+
     return ClusterConfig(
-        control_plane=control_plane,
-        workers=workers,
+        master_nodes=masters,
+        worker_nodes=workers,
+        load_balancer_ip=load_balancer_ip,
         pod_network_cidr=pod_network_cidr,
+        metallb_ip_range=metallb_ip_range,
     )
 
 
@@ -94,13 +124,18 @@ def confirm_cluster_config(config: ClusterConfig) -> bool:
     click.echo("📋 叢集配置摘要")
     click.echo("=" * 50)
     
-    click.echo(f"\n🖥️  Control Plane: {config.control_plane}")
-    
-    click.echo(f"\n👷 Workers ({len(config.workers)} 個):")
-    for i, worker in enumerate(config.workers):
+    click.echo(f"\n🧩 Masters ({len(config.master_nodes)} 個):")
+    for i, master in enumerate(config.master_nodes):
+        click.echo(f"   {i + 1}. {master}")
+
+    click.echo(f"\n👷 Workers ({len(config.worker_nodes)} 個):")
+    for i, worker in enumerate(config.worker_nodes):
         click.echo(f"   {i + 1}. {worker}")
-    
-    click.echo(f"\n🌐 Pod Network CIDR: {config.pod_network_cidr}")
+
+    click.echo(f"\n🌐 Control Plane Endpoint: {config.control_plane_endpoint()}")
+    click.echo(f"🌐 Pod Network CIDR: {config.pod_network_cidr}")
+    if config.metallb_ip_range:
+        click.echo(f"🧱 MetalLB IP Range: {config.metallb_ip_range}")
     
     click.echo("\n" + "-" * 50)
     return click.confirm("確認開始安裝？", default=False)

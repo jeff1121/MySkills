@@ -223,11 +223,16 @@ def validate(config: Optional[Path]) -> None:
         show_success(f"配置檔驗證通過：{config}")
         
         click.echo(f"\n叢集配置：")
-        click.echo(f"  Control Plane: {cluster_config.control_plane}")
-        click.echo(f"  Workers: {len(cluster_config.workers)} 個節點")
-        for i, worker in enumerate(cluster_config.workers, 1):
+        click.echo(f"  Masters: {len(cluster_config.master_nodes)} 個節點")
+        for i, master in enumerate(cluster_config.master_nodes, 1):
+            click.echo(f"    {i}. {master}")
+        click.echo(f"  Workers: {len(cluster_config.worker_nodes)} 個節點")
+        for i, worker in enumerate(cluster_config.worker_nodes, 1):
             click.echo(f"    {i}. {worker}")
+        click.echo(f"  Control Plane Endpoint: {cluster_config.control_plane_endpoint()}")
         click.echo(f"  Pod Network CIDR: {cluster_config.pod_network_cidr}")
+        if cluster_config.metallb_ip_range:
+            click.echo(f"  MetalLB IP Range: {cluster_config.metallb_ip_range}")
         
     except ConfigLoadError as e:
         show_error("配置載入失敗", str(e))
@@ -246,9 +251,11 @@ def run(params: dict) -> None:
     
     Args:
         params: 從對話式介面收集的參數，結構對應 skill.yaml 定義
-            - control_plane: dict (host, port, user, password)
-            - workers: list[dict]
+            - master_nodes: list[dict] (host, port, user, password)
+            - worker_nodes: list[dict]
+            - load_balancer_ip: str (optional)
             - pod_network_cidr: str (optional)
+            - metallb_ip_range: str (optional)
     """
     from models import NodeConnection, ClusterConfig
     from installer import run_installation
@@ -256,16 +263,23 @@ def run(params: dict) -> None:
     import click
     
     # 轉換參數為內部資料結構
-    cp_data = params["control_plane"]
-    control_plane = NodeConnection(
-        host=cp_data["host"],
-        port=cp_data.get("port", 22),
-        user=cp_data["user"],
-        password=cp_data.get("password"),
-    )
-    
+    master_data_list = params.get("master_nodes")
+    if not master_data_list and "control_plane" in params:
+        master_data_list = [params["control_plane"]]
+    if not master_data_list:
+        raise ValueError("缺少 master_nodes 參數")
+
+    masters = []
+    for m_data in master_data_list:
+        masters.append(NodeConnection(
+            host=m_data["host"],
+            port=m_data.get("port", 22),
+            user=m_data["user"],
+            password=m_data.get("password"),
+        ))
+
     workers = []
-    for w_data in params.get("workers", []):
+    for w_data in params.get("worker_nodes", params.get("workers", [])):
         workers.append(NodeConnection(
             host=w_data["host"],
             port=w_data.get("port", 22),
@@ -274,9 +288,11 @@ def run(params: dict) -> None:
         ))
     
     cluster_config = ClusterConfig(
-        control_plane=control_plane,
-        workers=workers,
-        pod_network_cidr=params.get("pod_network_cidr", "10.244.0.0/16"),
+        master_nodes=masters,
+        worker_nodes=workers,
+        load_balancer_ip=params.get("load_balancer_ip"),
+        pod_network_cidr=params.get("pod_network_cidr", "192.168.0.0/16"),
+        metallb_ip_range=params.get("metallb_ip_range"),
     )
     
     # 執行安裝
