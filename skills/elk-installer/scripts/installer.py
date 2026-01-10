@@ -127,6 +127,7 @@ class ElkInstaller:
                     self.options.kibana_host,
                     self.options.kibana_port,
                     self.context.elastic_password,
+                    self.options.http_port,
                 ),
             )
             self._run_step(
@@ -135,7 +136,10 @@ class ElkInstaller:
             )
             self._run_step(
                 "Write Logstash pipeline",
-                build_logstash_pipeline_script(),
+                build_logstash_pipeline_script(
+                    self.options.http_port,
+                    self.options.logstash_port,
+                ),
             )
             self._run_step(
                 "Create Logstash keystore",
@@ -231,6 +235,7 @@ class ElkInstaller:
             self.context.os_family,
             self.options.http_port,
             self.options.kibana_port,
+            self.options.logstash_port,
         )
         if not firewall_script:
             self._notes.append("Firewall rules not applied for this OS")
@@ -241,9 +246,15 @@ class ElkInstaller:
     def _run_tests(self) -> None:
         self._run_step(
             "Test Elasticsearch",
-            build_elasticsearch_test_script(self.context.elastic_password),
+            build_elasticsearch_test_script(
+                self.context.elastic_password,
+                self.options.http_port,
+            ),
         )
-        self._run_step("Test Kibana", build_kibana_test_script())
+        self._run_step(
+            "Test Kibana",
+            build_kibana_test_script(self.options.kibana_port),
+        )
         self._run_step("Test Logstash", build_logstash_test_script())
 
     def _log(self, message: str) -> None:

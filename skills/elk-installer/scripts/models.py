@@ -40,6 +40,7 @@ class InstallOptions:
     http_port: int = 9200
     kibana_host: str = "0.0.0.0"
     kibana_port: int = 5601
+    logstash_port: int = 5044
     heap_size: str = "2g"
     open_firewall: bool = False
     seed_hosts: Optional[list[str]] = None
@@ -56,6 +57,12 @@ class InstallOptions:
                 errors.append("seed_hosts is required for multi-node")
             if not self.initial_masters:
                 errors.append("initial_masters is required for multi-node")
+        if not (1 <= self.http_port <= 65535):
+            errors.append("http_port must be between 1 and 65535")
+        if not (1 <= self.kibana_port <= 65535):
+            errors.append("kibana_port must be between 1 and 65535")
+        if not (1 <= self.logstash_port <= 65535):
+            errors.append("logstash_port must be between 1 and 65535")
         if not self.elastic_major or not self.elastic_major.strip():
             errors.append("elastic_major is required")
         if not self.heap_size or not self.heap_size.strip():

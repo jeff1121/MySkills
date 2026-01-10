@@ -43,6 +43,7 @@ from models import ConnectionInfo, InstallOptions
 @click.option("--http-port", default=9200, show_default=True)
 @click.option("--kibana-host", default="0.0.0.0", show_default=True)
 @click.option("--kibana-port", default=5601, show_default=True)
+@click.option("--logstash-port", default=5044, show_default=True)
 @click.option("--heap-size", default="2g", show_default=True)
 @click.option("--open-firewall", is_flag=True, default=False)
 @click.option("--seed-host", multiple=True, help="Seed hosts for multi-node")
@@ -63,6 +64,7 @@ def install(
     http_port: int,
     kibana_host: str,
     kibana_port: int,
+    logstash_port: int,
     heap_size: str,
     open_firewall: bool,
     seed_host: tuple[str, ...],
@@ -88,6 +90,7 @@ def install(
         http_port=http_port,
         kibana_host=kibana_host.strip(),
         kibana_port=kibana_port,
+        logstash_port=logstash_port,
         heap_size=heap_size.strip(),
         open_firewall=open_firewall,
         seed_hosts=list(seed_host) or None,
@@ -121,6 +124,7 @@ def _confirm_options(options: InstallOptions) -> bool:
     click.echo(f"HTTP port: {options.http_port}")
     click.echo(f"Kibana host: {options.kibana_host}")
     click.echo(f"Kibana port: {options.kibana_port}")
+    click.echo(f"Logstash port: {options.logstash_port}")
     click.echo(f"Heap size: {options.heap_size}")
     click.echo(f"Open firewall: {options.open_firewall}")
     if options.seed_hosts:

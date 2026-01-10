@@ -1,30 +1,31 @@
 # SUSE Linux Enterprise Server 15
 
-## Update OS
+## 更新系統
 ```
 zypper refresh
 zypper update -y
 ```
 
-## Install prerequisites
+## 安裝前置套件
 ```
 zypper install -y curl
 ```
 
-## Add Elastic repo (8.x)
+## 加入 Elastic 套件庫（8.x）
 ```
 rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch
 zypper addrepo -f https://artifacts.elastic.co/packages/8.x/yum elastic-8.x
 zypper refresh
 ```
 
-## Install packages
+## 安裝套件
 ```
 zypper install -y elasticsearch logstash kibana
 ```
 
-## Optional firewall ports
-Only open ports after user approval.
+## 可選的防火牆連接埠
+提示: 僅在使用者同意後才開放連接埠。
+提示: 若設定不同埠號請替換。
 
 ```
 if systemctl is-active --quiet firewalld; then

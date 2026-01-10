@@ -189,12 +189,14 @@ def build_kibana_config_script(
     kibana_host: str,
     kibana_port: int,
     elastic_password: str,
+    elasticsearch_port: int,
 ) -> str:
     password_value = json.dumps(elastic_password)
+    elastic_hosts = json.dumps([f"https://localhost:{elasticsearch_port}"])
     content = (
         f"server.host: {json.dumps(kibana_host)}\n"
         f"server.port: {kibana_port}\n"
-        "elasticsearch.hosts: [\"https://localhost:9200\"]\n"
+        f"elasticsearch.hosts: {elastic_hosts}\n"
         "elasticsearch.username: \"elastic\"\n"
         f"elasticsearch.password: {password_value}\n"
         "elasticsearch.ssl.certificateAuthorities: [\"/etc/kibana/certs/http_ca.crt\"]\n"
@@ -202,16 +204,20 @@ def build_kibana_config_script(
     return _build_here_doc("/etc/kibana/kibana.yml", content)
 
 
-def build_logstash_pipeline_script() -> str:
+def build_logstash_pipeline_script(
+    elasticsearch_port: int,
+    logstash_port: int,
+) -> str:
+    elastic_url = f"https://localhost:{elasticsearch_port}"
     content = (
         "input {\n"
         "  beats {\n"
-        "    port => 5044\n"
+        f"    port => {logstash_port}\n"
         "  }\n"
         "}\n\n"
         "output {\n"
         "  elasticsearch {\n"
-        "    hosts => [\"https://localhost:9200\"]\n"
+        f"    hosts => [\"{elastic_url}\"]\n"
         "    user => \"elastic\"\n"
         "    password => \"${ES_PWD}\"\n"
         "    cacert => \"/etc/logstash/certs/http_ca.crt\"\n"
@@ -270,17 +276,17 @@ def build_elasticsearch_password_script() -> str:
 /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic --batch"""
 
 
-def build_elasticsearch_test_script(elastic_password: str) -> str:
+def build_elasticsearch_test_script(elastic_password: str, http_port: int) -> str:
     secret_block = _build_secret_variable("ES_PWD_VALUE", elastic_password)
     return f"""set -e
 {secret_block}
 curl --cacert /etc/elasticsearch/certs/http_ca.crt \\
-  -u \"elastic:${{ES_PWD_VALUE}}\" https://localhost:9200"""
+  -u \"elastic:${{ES_PWD_VALUE}}\" https://localhost:{http_port}"""
 
 
-def build_kibana_test_script() -> str:
-    return """set -e
-curl -I http://localhost:5601"""
+def build_kibana_test_script(kibana_port: int) -> str:
+    return f"""set -e
+curl -I http://localhost:{kibana_port}"""
 
 
 def build_logstash_test_script() -> str:

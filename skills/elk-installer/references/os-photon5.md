@@ -1,16 +1,16 @@
 # Photon OS 5
 
-## Update OS
+## 更新系統
 ```
 tdnf -y update
 ```
 
-## Install prerequisites
+## 安裝前置套件
 ```
 tdnf -y install curl ca-certificates
 ```
 
-## Add Elastic repo (8.x)
+## 加入 Elastic 套件庫（8.x）
 ```
 rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch
 
@@ -26,12 +26,13 @@ type=rpm-md
 REPO
 ```
 
-## Install packages
+## 安裝套件
 ```
 tdnf -y install elasticsearch logstash kibana
 ```
 
-## Optional firewall ports
-Only open ports after user approval.
+## 可選的防火牆連接埠
+提示: 僅在使用者同意後才開放連接埠。
+提示: 若設定不同埠號請替換。
 
-If iptables is in use, add rules for 9200, 5601, and 5044 as needed.
+提示: 若使用 iptables，依需求為 9200、5601、5044 加入規則。
