@@ -24,6 +24,7 @@ from commands import (
     build_update_script,
     build_wait_for_service_script,
     detect_os_family,
+    _parse_version_major,
 )
 from models import InstallOptions, InstallResult
 from ssh_client import ElkSSHClient, SSHCommandError, SSHConnectionError
@@ -38,6 +39,7 @@ class _InstallContext:
     os_family: Optional[str] = None
     use_sudo: bool = False
     elastic_password: Optional[str] = None
+    kibana_service_token: Optional[str] = None
 
 
 def run_installation(options: InstallOptions, verbose: bool = False) -> InstallResult:
@@ -94,6 +96,7 @@ class ElkInstaller:
                     self.options.cluster_name,
                     self.options.bind_host,
                     self.options.http_port,
+                    self.options.elastic_major,
                     self.options.node_mode,
                     self.options.seed_hosts,
                     self.options.initial_masters,
@@ -116,6 +119,10 @@ class ElkInstaller:
             )
 
             self.context.elastic_password = self._reset_elasticsearch_password()
+            if _parse_version_major(self.options.elastic_major) >= 8:
+                self.context.kibana_service_token = (
+                    self._create_kibana_service_token()
+                )
 
             self._run_step(
                 "Configure Kibana CA",
@@ -126,8 +133,10 @@ class ElkInstaller:
                 build_kibana_config_script(
                     self.options.kibana_host,
                     self.options.kibana_port,
-                    self.context.elastic_password,
                     self.options.http_port,
+                    self.options.elastic_major,
+                    self.context.elastic_password,
+                    self.context.kibana_service_token,
                 ),
             )
             self._run_step(
@@ -215,6 +224,28 @@ class ElkInstaller:
             raise InstallerError("Unable to parse elastic password output")
         return password
 
+    def _create_kibana_service_token(self) -> str:
+        token_name = "elk-installer"
+        script = f"""set -e
+export ES_PATH_CONF=/etc/elasticsearch
+/usr/share/elasticsearch/bin/elasticsearch-service-tokens delete elastic/kibana {token_name} || true
+/usr/share/elasticsearch/bin/elasticsearch-service-tokens create elastic/kibana {token_name}
+chown root:elasticsearch /etc/elasticsearch/service_tokens
+chmod 660 /etc/elasticsearch/service_tokens"""
+        stdout, stderr, exit_code = self.client.execute_script(
+            script,
+            use_sudo=self.context.use_sudo,
+        )
+        if exit_code != 0:
+            error = stderr.strip() or stdout.strip()
+            raise InstallerError(
+                f"Failed to create Kibana service token: {error}"
+            )
+        token = _parse_service_token(stdout)
+        if not token:
+            raise InstallerError("Unable to parse Kibana service token output")
+        return token
+
     def _run_step(self, name: str, script: str) -> None:
         self._log(f"[RUN] {name}")
         stdout, stderr, exit_code = self.client.execute_script(
@@ -282,4 +313,11 @@ def _parse_password(output: str) -> Optional[str]:
     for line in output.splitlines():
         if "New value:" in line:
             return line.split("New value:", 1)[1].strip()
+    return None
+
+
+def _parse_service_token(output: str) -> Optional[str]:
+    for line in output.splitlines():
+        if "SERVICE_TOKEN" in line and "=" in line:
+            return line.split("=", 1)[1].strip()
     return None

@@ -1,6 +1,6 @@
 ---
 name: elk-installer
-description: 透過隨附的 Python SSH 安裝腳本在遠端 Linux 伺服器上安裝與設定 Elastic Stack（Elasticsearch、Logstash、Kibana），包含 OS 更新、套件庫設定、組態、服務啟動、測試與結果回報。當使用者提供正式環境的 SSH 存取並希望自動化安裝 ELK/Elastic Stack（RHEL 9+、Oracle Linux 9+、SLES 15+、Debian 12+、Photon OS 5+）時使用。
+description: 安裝 Linux 伺服器上安裝與設定 Elastic Stack（Elasticsearch、Logstash、Kibana），包含 OS 更新、套件庫設定、組態、服務啟動、測試與結果回報。當使用者提供正式環境的 SSH 存取並希望自動化安裝 ELK/Elastic Stack（RHEL 9+、Oracle Linux 9+、SLES 15+、Debian 12+、Photon OS 5+）時使用。
 ---
 
 # ELK 安裝器
@@ -9,11 +9,11 @@ description: 透過隨附的 Python SSH 安裝腳本在遠端 Linux 伺服器上
 透過隨附的 Python SSH 安裝腳本在遠端 Linux 主機安裝、設定並驗證 Elasticsearch、Logstash 與 Kibana。指令一律在代理端機器上執行，不要在本機安裝。
 
 ## 支援平台
-- Red Hat Enterprise Linux 9+
-- Oracle Linux 9+
 - SUSE Linux Enterprise Server 15+
-- Debian Linux 12+
+- Red Hat Enterprise Linux 9+
 - Photon OS 5+
+- Oracle Linux 9+
+- Debian Linux 12+
 
 ## 必要輸入
 在進行任何變更前先收集 SSH 連線資訊：

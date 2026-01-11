@@ -155,6 +155,7 @@ def build_elasticsearch_config_script(
     cluster_name: str,
     bind_host: str,
     http_port: int,
+    elastic_major: str,
     node_mode: str,
     seed_hosts: Optional[list[str]],
     initial_masters: Optional[list[str]],
@@ -176,6 +177,21 @@ def build_elasticsearch_config_script(
             lines.append(
                 f"cluster.initial_master_nodes: {json.dumps(initial_masters)}"
             )
+    if _parse_version_major(elastic_major) >= 8:
+        lines.extend(
+            [
+                "xpack.security.enabled: true",
+                "xpack.security.enrollment.enabled: true",
+                "xpack.security.http.ssl:",
+                "  enabled: true",
+                "  keystore.path: certs/http.p12",
+                "xpack.security.transport.ssl:",
+                "  enabled: true",
+                "  verification_mode: certificate",
+                "  keystore.path: certs/transport.p12",
+                "  truststore.path: certs/transport.p12",
+            ]
+        )
     content = "\n".join(lines) + "\n"
     return _build_here_doc("/etc/elasticsearch/elasticsearch.yml", content)
 
@@ -188,19 +204,35 @@ def build_jvm_options_script(heap_size: str) -> str:
 def build_kibana_config_script(
     kibana_host: str,
     kibana_port: int,
-    elastic_password: str,
     elasticsearch_port: int,
+    elastic_major: str,
+    elastic_password: Optional[str],
+    service_token: Optional[str],
 ) -> str:
-    password_value = json.dumps(elastic_password)
     elastic_hosts = json.dumps([f"https://localhost:{elasticsearch_port}"])
-    content = (
-        f"server.host: {json.dumps(kibana_host)}\n"
-        f"server.port: {kibana_port}\n"
-        f"elasticsearch.hosts: {elastic_hosts}\n"
-        "elasticsearch.username: \"elastic\"\n"
-        f"elasticsearch.password: {password_value}\n"
-        "elasticsearch.ssl.certificateAuthorities: [\"/etc/kibana/certs/http_ca.crt\"]\n"
-    )
+    if _parse_version_major(elastic_major) >= 8:
+        if not service_token:
+            raise ValueError("service_token is required for Elastic 8+")
+        token_value = json.dumps(service_token)
+        content = (
+            f"server.host: {json.dumps(kibana_host)}\n"
+            f"server.port: {kibana_port}\n"
+            f"elasticsearch.hosts: {elastic_hosts}\n"
+            f"elasticsearch.serviceAccountToken: {token_value}\n"
+            "elasticsearch.ssl.certificateAuthorities: [\"/etc/kibana/certs/http_ca.crt\"]\n"
+        )
+    else:
+        if not elastic_password:
+            raise ValueError("elastic_password is required for Elastic < 8")
+        password_value = json.dumps(elastic_password)
+        content = (
+            f"server.host: {json.dumps(kibana_host)}\n"
+            f"server.port: {kibana_port}\n"
+            f"elasticsearch.hosts: {elastic_hosts}\n"
+            "elasticsearch.username: \"elastic\"\n"
+            f"elasticsearch.password: {password_value}\n"
+            "elasticsearch.ssl.certificateAuthorities: [\"/etc/kibana/certs/http_ca.crt\"]\n"
+        )
     return _build_here_doc("/etc/kibana/kibana.yml", content)
 
 
@@ -245,15 +277,19 @@ def build_logstash_keystore_script(elastic_password: str) -> str:
     secret_block = _build_secret_variable("ES_PWD_VALUE", elastic_password)
     return f"""set -e
 {secret_block}
-/usr/share/logstash/bin/logstash-keystore create --force
+if [ ! -f /etc/logstash/logstash.keystore ]; then
+  printf 'y\\n' | /usr/share/logstash/bin/logstash-keystore create --path.settings /etc/logstash
+fi
+/usr/share/logstash/bin/logstash-keystore remove ES_PWD --path.settings /etc/logstash || true
 printf '%s' \"${{ES_PWD_VALUE}}\" | \
-  /usr/share/logstash/bin/logstash-keystore add ES_PWD --stdin --force
+  /usr/share/logstash/bin/logstash-keystore add ES_PWD --path.settings /etc/logstash --stdin
 chown logstash:logstash /etc/logstash/logstash.keystore"""
 
 
 def build_service_enable_script(service: str) -> str:
     return f"""set -e
-systemctl enable --now {service}"""
+systemctl enable {service}
+systemctl restart {service}"""
 
 
 def build_wait_for_service_script(service: str, wait_seconds: int) -> str:
@@ -281,12 +317,21 @@ def build_elasticsearch_test_script(elastic_password: str, http_port: int) -> st
     return f"""set -e
 {secret_block}
 curl --cacert /etc/elasticsearch/certs/http_ca.crt \\
-  -u \"elastic:${{ES_PWD_VALUE}}\" https://localhost:{http_port}"""
+  -u \"elastic:${{ES_PWD_VALUE}}\" https://127.0.0.1:{http_port}"""
 
 
 def build_kibana_test_script(kibana_port: int) -> str:
     return f"""set -e
-curl -I http://localhost:{kibana_port}"""
+i=0
+while [ $i -lt 30 ]; do
+  if curl -fsI http://127.0.0.1:{kibana_port} >/dev/null; then
+    exit 0
+  fi
+  sleep 5
+  i=$((i + 1))
+done
+curl -I http://127.0.0.1:{kibana_port}
+exit 1"""
 
 
 def build_logstash_test_script() -> str:
@@ -304,7 +349,8 @@ ELK_EOF"""
 def _build_secret_variable(name: str, value: str) -> str:
     return f"""{name}=$(cat <<'ELK_SECRET'
 {value}
-ELK_SECRET)
+ELK_SECRET
+)
 """
 
 
