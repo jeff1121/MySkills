@@ -41,6 +41,8 @@ class InstallOptions:
     kibana_host: str = "0.0.0.0"
     kibana_port: int = 5601
     logstash_port: int = 5044
+    fleet_server_host: str = "0.0.0.0"
+    fleet_server_port: int = 8220
     heap_size: str = "2g"
     open_firewall: bool = False
     seed_hosts: Optional[list[str]] = None
@@ -63,8 +65,12 @@ class InstallOptions:
             errors.append("kibana_port must be between 1 and 65535")
         if not (1 <= self.logstash_port <= 65535):
             errors.append("logstash_port must be between 1 and 65535")
+        if not (1 <= self.fleet_server_port <= 65535):
+            errors.append("fleet_server_port must be between 1 and 65535")
         if not self.elastic_major or not self.elastic_major.strip():
             errors.append("elastic_major is required")
+        if not self.fleet_server_host or not self.fleet_server_host.strip():
+            errors.append("fleet_server_host is required")
         if not self.heap_size or not self.heap_size.strip():
             errors.append("heap_size is required")
         return errors
@@ -78,6 +84,7 @@ class InstallResult:
     elastic_password: Optional[str] = None
     elasticsearch_url: Optional[str] = None
     kibana_url: Optional[str] = None
+    fleet_server_url: Optional[str] = None
     os_family: Optional[str] = None
     error: Optional[str] = None
 
@@ -92,6 +99,8 @@ class InstallResult:
             result["elasticsearch_url"] = self.elasticsearch_url
         if self.kibana_url:
             result["kibana_url"] = self.kibana_url
+        if self.fleet_server_url:
+            result["fleet_server_url"] = self.fleet_server_url
         if self.os_family:
             result["os_family"] = self.os_family
         if self.error:

@@ -46,6 +46,8 @@ elasticsearch.hosts: ["https://localhost:9200"]
 elasticsearch.username: "elastic"
 elasticsearch.password: "set_this_value"
 elasticsearch.ssl.certificateAuthorities: ["/etc/kibana/certs/http_ca.crt"]
+xpack.fleet.agents.elasticsearch.hosts: ["https://localhost:9200"]
+xpack.fleet.agents.fleet_server.hosts: ["https://FLEET_HOST:8220"]
 ```
 提示: 若設定了不同的 Elasticsearch HTTP 連接埠，請替換 `9200`。
 
@@ -54,6 +56,38 @@ elasticsearch.ssl.certificateAuthorities: ["/etc/kibana/certs/http_ca.crt"]
 mkdir -p /etc/kibana/certs
 cp /etc/elasticsearch/certs/http_ca.crt /etc/kibana/certs/
 chown -R kibana:kibana /etc/kibana/certs
+```
+
+## Fleet Server（Elastic Agent）
+Fleet Server 需要 Kibana 已完成啟動並可登入。
+提示: 套件庫安裝的 elastic-agent 為 basic flavor，Fleet Server 需要 complete flavor。建議使用 Elastic Agent tarball 版本安裝。
+
+初始化 Fleet:
+```
+curl -u elastic:PASSWORD -H 'kbn-xsrf: true' -X POST http://localhost:5601/api/fleet/setup
+```
+
+取得 Fleet Server policy ID:
+```
+curl -u elastic:PASSWORD -H 'kbn-xsrf: true' http://localhost:5601/api/fleet/agent_policies?perPage=200
+```
+提示: 找到 `is_default_fleet_server` 為 `true` 的 policy id。
+
+建立 Fleet Server service token:
+```
+export ES_PATH_CONF=/etc/elasticsearch
+/usr/share/elasticsearch/bin/elasticsearch-service-tokens create elastic/fleet-server fleet-server-token
+```
+
+安裝並啟動 Fleet Server:
+```
+elastic-agent install \
+  --fleet-server-es=https://localhost:9200 \
+  --fleet-server-service-token=SERVICE_TOKEN \
+  --fleet-server-policy=FLEET_POLICY_ID \
+  --fleet-server-host=FLEET_HOST \
+  --fleet-server-port=8220 \
+  --fleet-server-es-ca=/etc/elasticsearch/certs/http_ca.crt
 ```
 
 ## Logstash
@@ -90,6 +124,7 @@ chown -R logstash:logstash /etc/logstash/certs
 systemctl enable --now elasticsearch
 systemctl enable --now kibana
 systemctl enable --now logstash
+systemctl enable --now elastic-agent
 ```
 
 ## 測試
@@ -107,4 +142,10 @@ curl -I http://localhost:5601
 Logstash 組態測試:
 ```
 /usr/share/logstash/bin/logstash --path.settings /etc/logstash -t
+```
+
+Fleet Server 測試:
+```
+systemctl is-active --quiet elastic-agent
+curl -k https://localhost:8220/api/status
 ```

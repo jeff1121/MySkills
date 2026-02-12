@@ -8,11 +8,17 @@ from commands import (
     build_elasticsearch_config_script,
     build_elasticsearch_password_script,
     build_elasticsearch_test_script,
+    build_fleet_server_install_script,
+    build_fleet_server_test_script,
+    build_fleet_service_token_script,
+    build_fleet_setup_script,
     build_firewall_script,
     build_install_packages_script,
     build_jvm_options_script,
     build_kibana_ca_script,
     build_kibana_config_script,
+    build_kibana_encryption_keys_script,
+    build_kibana_fleet_outputs_script,
     build_kibana_test_script,
     build_logstash_ca_script,
     build_logstash_keystore_script,
@@ -21,6 +27,7 @@ from commands import (
     build_prereq_script,
     build_repo_script,
     build_service_enable_script,
+    build_service_stop_script,
     build_update_script,
     build_wait_for_service_script,
     detect_os_family,
@@ -40,6 +47,8 @@ class _InstallContext:
     use_sudo: bool = False
     elastic_password: Optional[str] = None
     kibana_service_token: Optional[str] = None
+    fleet_policy_id: Optional[str] = None
+    fleet_service_token: Optional[str] = None
 
 
 def run_installation(options: InstallOptions, verbose: bool = False) -> InstallResult:
@@ -133,11 +142,25 @@ class ElkInstaller:
                 build_kibana_config_script(
                     self.options.kibana_host,
                     self.options.kibana_port,
+                    self.options.bind_host,
                     self.options.http_port,
                     self.options.elastic_major,
                     self.context.elastic_password,
                     self.context.kibana_service_token,
+                    self.options.fleet_server_host,
+                    self.options.fleet_server_port,
                 ),
+            )
+            self._run_step(
+                "Configure Kibana Fleet outputs",
+                build_kibana_fleet_outputs_script(
+                    self.options.connection.host,
+                    self.options.http_port,
+                ),
+            )
+            self._run_step(
+                "Ensure Kibana encryption keys",
+                build_kibana_encryption_keys_script(),
             )
             self._run_step(
                 "Configure Logstash CA",
@@ -146,6 +169,7 @@ class ElkInstaller:
             self._run_step(
                 "Write Logstash pipeline",
                 build_logstash_pipeline_script(
+                    self.options.bind_host,
                     self.options.http_port,
                     self.options.logstash_port,
                 ),
@@ -157,6 +181,41 @@ class ElkInstaller:
             self._run_step(
                 "Enable and start Kibana",
                 build_service_enable_script("kibana"),
+            )
+            self._run_step(
+                "Wait for Kibana",
+                build_kibana_test_script(
+                    self.options.kibana_host,
+                    self.options.kibana_port,
+                ),
+            )
+            self.context.fleet_policy_id = self._setup_fleet_policy()
+            self.context.fleet_service_token = self._create_fleet_service_token()
+            self._run_step(
+                "Stop Logstash",
+                build_service_stop_script("logstash"),
+            )
+            self._run_step(
+                "Install Fleet Server",
+                build_fleet_server_install_script(
+                    self.options.bind_host,
+                    self.options.http_port,
+                    self.options.fleet_server_host,
+                    self.options.fleet_server_port,
+                    self.context.fleet_service_token,
+                    self.context.fleet_policy_id,
+                ),
+            )
+            self._run_step(
+                "Enable and start Elastic Agent",
+                build_service_enable_script("elastic-agent"),
+            )
+            self._run_step(
+                "Wait for Elastic Agent",
+                build_wait_for_service_script(
+                    "elastic-agent",
+                    self.options.wait_seconds,
+                ),
             )
             self._run_step(
                 "Enable and start Logstash",
@@ -178,6 +237,7 @@ class ElkInstaller:
                 elastic_password=self.context.elastic_password,
                 elasticsearch_url=self._elasticsearch_url(),
                 kibana_url=self._kibana_url(),
+                fleet_server_url=self._fleet_server_url(),
                 os_family=self.context.os_family,
             )
 
@@ -246,6 +306,41 @@ chmod 660 /etc/elasticsearch/service_tokens"""
             raise InstallerError("Unable to parse Kibana service token output")
         return token
 
+    def _setup_fleet_policy(self) -> str:
+        if not self.context.elastic_password:
+            raise InstallerError("elastic password is required for Fleet setup")
+        stdout, stderr, exit_code = self.client.execute_script(
+            build_fleet_setup_script(
+                self.options.kibana_host,
+                self.options.kibana_port,
+                self.context.elastic_password,
+            ),
+            use_sudo=self.context.use_sudo,
+        )
+        if exit_code != 0:
+            error = stderr.strip() or stdout.strip()
+            raise InstallerError(f"Fleet setup failed: {error}")
+        policy_id = _parse_output_value(stdout)
+        if not policy_id:
+            raise InstallerError("Unable to parse Fleet policy ID output")
+        return policy_id
+
+    def _create_fleet_service_token(self) -> str:
+        token_name = "elk-installer-fleet"
+        stdout, stderr, exit_code = self.client.execute_script(
+            build_fleet_service_token_script(token_name),
+            use_sudo=self.context.use_sudo,
+        )
+        if exit_code != 0:
+            error = stderr.strip() or stdout.strip()
+            raise InstallerError(
+                f"Failed to create Fleet service token: {error}"
+            )
+        token = _parse_service_token(stdout)
+        if not token:
+            raise InstallerError("Unable to parse Fleet service token output")
+        return token
+
     def _run_step(self, name: str, script: str) -> None:
         self._log(f"[RUN] {name}")
         stdout, stderr, exit_code = self.client.execute_script(
@@ -267,6 +362,7 @@ chmod 660 /etc/elasticsearch/service_tokens"""
             self.options.http_port,
             self.options.kibana_port,
             self.options.logstash_port,
+            self.options.fleet_server_port,
         )
         if not firewall_script:
             self._notes.append("Firewall rules not applied for this OS")
@@ -278,15 +374,26 @@ chmod 660 /etc/elasticsearch/service_tokens"""
         self._run_step(
             "Test Elasticsearch",
             build_elasticsearch_test_script(
+                self.options.bind_host,
                 self.context.elastic_password,
                 self.options.http_port,
             ),
         )
         self._run_step(
             "Test Kibana",
-            build_kibana_test_script(self.options.kibana_port),
+            build_kibana_test_script(
+                self.options.kibana_host,
+                self.options.kibana_port,
+            ),
         )
         self._run_step("Test Logstash", build_logstash_test_script())
+        self._run_step(
+            "Test Fleet Server",
+            build_fleet_server_test_script(
+                self.options.fleet_server_host,
+                self.options.fleet_server_port,
+            ),
+        )
 
     def _log(self, message: str) -> None:
         print(message)
@@ -296,6 +403,12 @@ chmod 660 /etc/elasticsearch/service_tokens"""
 
     def _kibana_url(self) -> str:
         return f"http://{self.options.connection.host}:{self.options.kibana_port}"
+
+    def _fleet_server_url(self) -> str:
+        return (
+            f"https://{self.options.fleet_server_host}:"
+            f"{self.options.fleet_server_port}"
+        )
 
 
 def _parse_os_release(content: str) -> tuple[Optional[str], Optional[str]]:
@@ -320,4 +433,12 @@ def _parse_service_token(output: str) -> Optional[str]:
     for line in output.splitlines():
         if "SERVICE_TOKEN" in line and "=" in line:
             return line.split("=", 1)[1].strip()
+    return None
+
+
+def _parse_output_value(output: str) -> Optional[str]:
+    for line in output.splitlines():
+        value = line.strip()
+        if value:
+            return value
     return None

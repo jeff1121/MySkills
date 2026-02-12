@@ -1,0 +1,20 @@
+[project]
+name = "pdf-skill"
+version = "1.0.0"
+description = "PDF 處理工具集：表單填寫、文字提取、頁面操作等"
+requires-python = ">=3.10"
+dependencies = [
+    "pypdf>=4.0",
+    "pdfplumber>=0.10",
+    "pdf2image>=1.16",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "pytesseract>=0.3",
+]
+dev = [
+    "ruff>=0.4",
+    "mypy>=1.10",
+]

@@ -1,12 +1,13 @@
 ---
 name: elk-installer
-description: 安裝 Linux 伺服器上安裝與設定 Elastic Stack（Elasticsearch、Logstash、Kibana），包含 OS 更新、套件庫設定、組態、服務啟動、測試與結果回報。當使用者提供正式環境的 SSH 存取並希望自動化安裝 ELK/Elastic Stack（RHEL 9+、Oracle Linux 9+、SLES 15+、Debian 12+、Photon OS 5+）時使用。
+description: 安裝 Linux 伺服器上安裝與設定 Elastic Stack（Elasticsearch、Logstash、Kibana、Fleet Server），包含 OS 更新、套件庫設定、組態、服務啟動、測試與結果回報。當使用者提供正式環境的 SSH 存取並希望自動化安裝 ELK/Elastic Stack（RHEL 9+、Oracle Linux 9+、SLES 15+、Debian 12+、Photon OS 5+）時使用。
+version: 1.1.0
 ---
 
 # ELK 安裝器
 
 ## 概覽
-透過隨附的 Python SSH 安裝腳本在遠端 Linux 主機安裝、設定並驗證 Elasticsearch、Logstash 與 Kibana。指令一律在代理端機器上執行，不要在本機安裝。
+透過隨附的 Python SSH 安裝腳本在遠端 Linux 主機安裝、設定並驗證 Elasticsearch、Logstash、Kibana 與 Fleet Server（Elastic Agent）。指令一律在代理端機器上執行，不要在本機安裝。
 
 ## 支援平台
 - SUSE Linux Enterprise Server 15+
@@ -30,8 +31,10 @@ description: 安裝 Linux 伺服器上安裝與設定 Elastic Stack（Elasticsea
 - Elasticsearch HTTP 連接埠（預設 9200）
 - Kibana 連接埠（預設 5601）
 - Logstash Beats 連接埠（預設 5044）
+- Fleet Server 綁定位址（預設為 HostAddr）
+- Fleet Server 連接埠（預設 8220）
 - JVM heap size（預設 2g）
-- 是否開放 Elasticsearch、Kibana、Logstash 的防火牆連接埠（預設 9200、5601、5044）
+- 是否開放 Elasticsearch、Kibana、Logstash、Fleet Server 的防火牆連接埠（預設 9200、5601、5044、8220）
 - 多節點的 seed hosts 與 initial masters
 
 提示範例：
@@ -54,12 +57,14 @@ HostPass:
 - 套用變更前先確認設定摘要。
 - 目標主機需具備 root 權限或免密 sudo。
 - 多節點情境下，每台節點各跑一次，並使用相同的 seed host 與 initial master 值。
+- Fleet Server 會透過 Elastic Agent complete 版（tarball）安裝並註冊到 Kibana Fleet。
 
 指令範例：
 ```
 python3 scripts/main.py \
   --host 10.0.0.10 \
   --user root \
+  --fleet-server-host 10.0.0.10 \
   --open-firewall
 ```
 
@@ -67,6 +72,7 @@ python3 scripts/main.py \
 - 擷取腳本輸出摘要並回報：
   - Elasticsearch URL
   - Kibana URL
+  - Fleet Server URL
   - 產生的 elastic 密碼
 - 提醒使用者妥善保存密碼。
 - 若在 Photon OS 上略過防火牆規則，需明確說明。
@@ -84,6 +90,7 @@ python3 scripts/main.py \
 - Elasticsearch 無法啟動：檢查 `journalctl -u elasticsearch` 與組態語法。
 - Kibana 無法連線：確認帳密、CA 與 `elasticsearch.hosts`。
 - Logstash pipeline 錯誤：執行組態測試並查看 `/var/log/logstash/logstash-plain.log`。
+- Fleet Server 無法啟動：確認 `elastic-agent` 服務狀態與 `/opt/Elastic/Agent/data/elastic-agent-*/logs`。
 
 ## 腳本
 - `scripts/main.py` - SSH 安裝 CLI 進入點

@@ -32,6 +32,7 @@ if systemctl is-active --quiet firewalld; then
   firewall-cmd --add-port=9200/tcp --permanent
   firewall-cmd --add-port=5601/tcp --permanent
   firewall-cmd --add-port=5044/tcp --permanent
+  firewall-cmd --add-port=8220/tcp --permanent
   firewall-cmd --reload
 fi
 ```

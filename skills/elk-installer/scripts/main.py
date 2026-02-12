@@ -44,6 +44,8 @@ from models import ConnectionInfo, InstallOptions
 @click.option("--kibana-host", default="0.0.0.0", show_default=True)
 @click.option("--kibana-port", default=5601, show_default=True)
 @click.option("--logstash-port", default=5044, show_default=True)
+@click.option("--fleet-server-host", default=None)
+@click.option("--fleet-server-port", default=8220, show_default=True)
 @click.option("--heap-size", default="2g", show_default=True)
 @click.option("--open-firewall", is_flag=True, default=False)
 @click.option("--seed-host", multiple=True, help="Seed hosts for multi-node")
@@ -65,6 +67,8 @@ def install(
     kibana_host: str,
     kibana_port: int,
     logstash_port: int,
+    fleet_server_host: Optional[str],
+    fleet_server_port: int,
     heap_size: str,
     open_firewall: bool,
     seed_host: tuple[str, ...],
@@ -91,6 +95,8 @@ def install(
         kibana_host=kibana_host.strip(),
         kibana_port=kibana_port,
         logstash_port=logstash_port,
+        fleet_server_host=(fleet_server_host or host).strip(),
+        fleet_server_port=fleet_server_port,
         heap_size=heap_size.strip(),
         open_firewall=open_firewall,
         seed_hosts=list(seed_host) or None,
@@ -125,6 +131,8 @@ def _confirm_options(options: InstallOptions) -> bool:
     click.echo(f"Kibana host: {options.kibana_host}")
     click.echo(f"Kibana port: {options.kibana_port}")
     click.echo(f"Logstash port: {options.logstash_port}")
+    click.echo(f"Fleet Server host: {options.fleet_server_host}")
+    click.echo(f"Fleet Server port: {options.fleet_server_port}")
     click.echo(f"Heap size: {options.heap_size}")
     click.echo(f"Open firewall: {options.open_firewall}")
     if options.seed_hosts:
@@ -146,6 +154,8 @@ def _output_result(result, json_output: bool) -> None:
             click.echo(f"Elasticsearch: {result.elasticsearch_url}")
         if result.kibana_url:
             click.echo(f"Kibana: {result.kibana_url}")
+        if result.fleet_server_url:
+            click.echo(f"Fleet Server: {result.fleet_server_url}")
         if result.elastic_password:
             click.echo(f"Elastic password: {result.elastic_password}")
             click.echo("Store this password securely.")

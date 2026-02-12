@@ -37,5 +37,6 @@ if command -v ufw >/dev/null 2>&1; then
   ufw allow 9200/tcp
   ufw allow 5601/tcp
   ufw allow 5044/tcp
+  ufw allow 8220/tcp
 fi
 ```

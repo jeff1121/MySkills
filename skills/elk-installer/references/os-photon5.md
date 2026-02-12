@@ -35,4 +35,4 @@ tdnf -y install elasticsearch logstash kibana
 提示: 僅在使用者同意後才開放連接埠。
 提示: 若設定不同埠號請替換。
 
-提示: 若使用 iptables，依需求為 9200、5601、5044 加入規則。
+提示: 若使用 iptables，依需求為 9200、5601、5044、8220 加入規則。
