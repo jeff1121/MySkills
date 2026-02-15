@@ -1,0 +1,8 @@
+# Cisco Configer Skill Dependencies
+# Python 3.11+
+
+# SSH 連線（Cisco 網路設備專用）
+netmiko>=4.2.0
+
+# CLI 介面
+click>=8.0.0
