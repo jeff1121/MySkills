@@ -1,5 +1,9 @@
 # FinMind MCP Server
 
+[![GitHub Release](https://img.shields.io/github/v/release/jeff1121/MySkills?filter=finmind-*&label=version&color=blue)](https://github.com/jeff1121/MySkills/releases?q=finmind)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+
 FinMind 金融數據 MCP (Model Context Protocol) Server，讓 AI Agent 能查詢台股、美股、期貨、選擇權等金融資料，並進行技術分析與基本面分析。
 
 ## 功能特色
@@ -148,20 +152,20 @@ python -m finmind_mcp.server
 
 ```bash
 # 建置映像
-docker compose -f docker-compose.build.yml build
+docker compose -f infra/docker-compose.build.yml build
 
 # 啟動服務
-docker compose up -d
+docker compose -f infra/docker-compose.yml up -d
 
 # 查看日誌
-docker compose logs -f
+docker compose -f infra/docker-compose.yml logs -f
 
 # 停止服務
-docker compose down
+docker compose -f infra/docker-compose.yml down
 
 # 推送到 DockerHub
-./publish.sh           # 推送 latest
-./publish.sh v0.1.0    # 推送指定版本
+./infra/publish.sh           # 推送 latest
+./infra/publish.sh v0.1.0    # 推送指定版本
 ```
 
 ## 專案結構
@@ -171,13 +175,15 @@ FinMind/
 ├── README.md                       # 本文件
 ├── Quickstart.md                   # 快速入門指南
 ├── Tasks.md                        # 實作任務清單
-├── Dockerfile                      # Docker 映像定義
-├── docker-compose.build.yml        # 建置映像
-├── docker-compose.yml              # 部署設定
-├── publish.sh                      # 推送 DockerHub
 ├── pyproject.toml                  # Python 專案設定
 ├── .env.example                    # 環境變數範例
+├── infra/                          # 基礎設施與部署
+│   ├── Dockerfile                  # Docker 映像定義
+│   ├── docker-compose.build.yml    # 建置映像
+│   ├── docker-compose.yml          # 部署設定
+│   └── publish.sh                  # 推送 DockerHub
 ├── src/finmind_mcp/
+│   ├── __init__.py                 # 版本號定義
 │   ├── server.py                   # MCP Server 進入點 (FastMCP)
 │   ├── client.py                   # FinMind API HTTP 客戶端
 │   ├── config.py                   # 設定管理
