@@ -53,15 +53,26 @@ def cli() -> None:
     default=False,
     help="顯示詳細輸出",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="預覽模式：顯示將執行的操作但不實際執行",
+)
 def install(
     config: Optional[Path],
     json_output: bool,
     yes: bool,
     verbose: bool,
+    dry_run: bool,
 ) -> None:
     """安裝 Kubernetes 叢集"""
     try:
         cluster_config = _get_cluster_config(config)
+        
+        if dry_run:
+            _show_dry_run(cluster_config, json_output)
+            sys.exit(0)
         
         if not yes and not json_output:
             if not confirm_cluster_config(cluster_config):
@@ -91,6 +102,52 @@ def _get_cluster_config(config_path: Optional[Path]) -> ClusterConfig:
     if config_path:
         return load_cluster_config(config_path)
     return collect_cluster_nodes()
+
+
+def _show_dry_run(cluster_config: ClusterConfig, json_output: bool) -> None:
+    """顯示 dry-run 預覽"""
+    steps = [
+        "1. 驗證所有節點的 SSH 連線",
+        "2. 在所有節點上停用 swap",
+        "3. 載入核心模組（overlay, br_netfilter）",
+        "4. 設定 sysctl 網路參數",
+        "5. 安裝 containerd 容器運行時",
+        "6. 安裝 Kubernetes 套件（kubeadm, kubelet, kubectl）",
+        f"7. 在第一個 Master 節點初始化叢集（kubeadm init）",
+        "8. 安裝 Calico CNI 網路插件",
+        "9. 產生 join 命令",
+    ]
+    if len(cluster_config.master_nodes) > 1:
+        steps.append("10. 加入其他 Master 節點")
+    steps.append(f"{len(steps) + 1}. 加入 Worker 節點")
+    if cluster_config.metallb_ip_range:
+        steps.append(f"{len(steps) + 1}. 安裝 MetalLB LoadBalancer")
+
+    if json_output:
+        output = {
+            "dry_run": True,
+            "masters": len(cluster_config.master_nodes),
+            "workers": len(cluster_config.worker_nodes),
+            "pod_network_cidr": cluster_config.pod_network_cidr,
+            "metallb_ip_range": cluster_config.metallb_ip_range,
+            "steps": steps,
+        }
+        click.echo(json.dumps(output, ensure_ascii=False, indent=2))
+    else:
+        click.echo("\n🔍 Dry-run 模式 — 以下為將執行的操作：\n")
+        click.echo(f"  Masters: {len(cluster_config.master_nodes)} 個節點")
+        for i, m in enumerate(cluster_config.master_nodes, 1):
+            click.echo(f"    {i}. {m}")
+        click.echo(f"  Workers: {len(cluster_config.worker_nodes)} 個節點")
+        for i, w in enumerate(cluster_config.worker_nodes, 1):
+            click.echo(f"    {i}. {w}")
+        click.echo(f"  Pod CIDR: {cluster_config.pod_network_cidr}")
+        if cluster_config.metallb_ip_range:
+            click.echo(f"  MetalLB: {cluster_config.metallb_ip_range}")
+        click.echo("\n  執行步驟：")
+        for step in steps:
+            click.echo(f"    {step}")
+        click.echo("\n  ⚠️  不會實際執行任何操作。移除 --dry-run 以開始安裝。")
 
 
 def _output_result(result, json_output: bool) -> None:

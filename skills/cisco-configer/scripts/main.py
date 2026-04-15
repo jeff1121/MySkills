@@ -58,9 +58,12 @@ def cli():
 @click.option(
     "-v", "--verbose", is_flag=True, default=False, help="顯示詳細資訊。"
 )
+@click.option(
+    "--dry-run", is_flag=True, default=False, help="預覽模式：顯示將執行的指令但不連線設備。"
+)
 def query(
     host, username, password, device_type, enable_password, port,
-    intent, json_output, yes, verbose,
+    intent, json_output, yes, verbose, dry_run,
 ):
     """查詢 Cisco 設備資訊。"""
     connection = ConnectionInfo(
@@ -71,6 +74,10 @@ def query(
         enable_password=enable_password,
         port=port,
     )
+
+    if dry_run:
+        _show_dry_run("query", connection, device_type, intent, json_output)
+        sys.exit(0)
 
     # 非互動式終端（agent / pipeline）自動跳過確認
     if not yes and not sys.stdin.isatty():
@@ -154,9 +161,12 @@ def query(
 @click.option(
     "-v", "--verbose", is_flag=True, default=False, help="顯示詳細資訊。"
 )
+@click.option(
+    "--dry-run", is_flag=True, default=False, help="預覽模式：顯示將執行的指令但不連線設備。"
+)
 def config(
     host, username, password, device_type, enable_password, port,
-    intent, params, json_output, yes, verbose,
+    intent, params, json_output, yes, verbose, dry_run,
 ):
     """設定 Cisco 設備組態。"""
     connection = ConnectionInfo(
@@ -173,6 +183,10 @@ def config(
     except json.JSONDecodeError:
         click.echo("❌ --params 格式錯誤，必須為有效的 JSON 字串。", err=True)
         sys.exit(1)
+
+    if dry_run:
+        _show_dry_run("config", connection, device_type, intent, json_output, config_params)
+        sys.exit(0)
 
     # 非互動式終端（agent / pipeline）自動跳過確認
     if not yes and not sys.stdin.isatty():
@@ -209,6 +223,31 @@ def config(
             click.echo(f"\n❌ 設定失敗：{result.error}\n", err=True)
 
     sys.exit(0 if result.success else 1)
+
+
+def _show_dry_run(mode, connection, device_type, intent, json_output, config_params=None):
+    """顯示 dry-run 預覽。"""
+    info = {
+        "dry_run": True,
+        "mode": mode,
+        "target": str(connection),
+        "device_type": device_type or "auto-detect",
+        "intent": intent,
+    }
+    if config_params:
+        info["config_params"] = config_params
+
+    if json_output:
+        click.echo(json.dumps(info, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"\n🔍 Dry-run 模式 — 以下為將執行的操作：\n")
+        click.echo(f"  模式：{'查詢' if mode == 'query' else '設定'}")
+        click.echo(f"  目標設備：{connection}")
+        click.echo(f"  設備類型：{device_type or '自動偵測'}")
+        click.echo(f"  意圖：{intent}")
+        if config_params:
+            click.echo(f"  設定參數：{json.dumps(config_params, ensure_ascii=False)}")
+        click.echo(f"\n  ⚠️  不會實際連線設備。移除 --dry-run 以執行。")
 
 
 if __name__ == "__main__":
