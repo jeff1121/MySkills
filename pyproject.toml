@@ -1,0 +1,57 @@
+[project]
+name = "myskills"
+version = "0.1.0"
+description = "AI Agent Skills 集合 — 可安裝到 Claude CLI、Copilot CLI 等 AI 工具"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+    "pytest>=8.0",
+    "mypy>=1.10",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["skills"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (Click pattern)
+    "RUF001", # ambiguous unicode (CJK comments)
+    "RUF002", # ambiguous unicode in docstring (CJK/math symbols)
+    "RUF003", # ambiguous unicode in comment
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["B011", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["skills"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
