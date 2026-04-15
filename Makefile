@@ -26,9 +26,9 @@ validate: ## Validate all SKILL.md files have required sections
 			grep -q "^name:" "$$dir/SKILL.md" || missing="$$missing name"; \
 			grep -q "^description:" "$$dir/SKILL.md" || missing="$$missing description"; \
 			grep -q "^version:" "$$dir/SKILL.md" || missing="$$missing version"; \
-			grep -qi "## .*overview\|## .*概覽" "$$dir/SKILL.md" || missing="$$missing overview"; \
-			grep -qi "## .*workflow\|## .*工作流程" "$$dir/SKILL.md" || missing="$$missing workflow"; \
-			grep -qi "## .*error\|## .*疑難排解\|## .*troubleshoot" "$$dir/SKILL.md" || missing="$$missing error-handling"; \
+			grep -qiE "^## .*(overview|概覽)" "$$dir/SKILL.md" || missing="$$missing overview"; \
+			grep -qiE "^##+ .*(workflow|工作流程|快速流程|stage one)" "$$dir/SKILL.md" || missing="$$missing workflow"; \
+			grep -qiE "^## .*(error|troubleshoot|疑難排解|錯誤處理|常見問題)" "$$dir/SKILL.md" || missing="$$missing error-handling"; \
 			if [ -z "$$missing" ]; then \
 				echo "✅ $$skill"; \
 			else \

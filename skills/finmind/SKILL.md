@@ -120,3 +120,11 @@ docker compose up -d
 - [FinMind 官方文件](https://finmindtrade.com/)
 - [API 參考文件](../../FinMind/references/finmind_api.md)
 - [MCP Server 原始碼](../../FinMind/)
+
+## Error Handling / 疑難排解
+
+- **Token 無效或過期**: 重新至 [FinMind](https://finmindtrade.com/) 取得新的 API Token，更新環境變數 `FINMIND_TOKEN`。
+- **API 回應 429 (Rate Limit)**: 降低請求頻率，等待數秒後重試。FinMind 免費方案有每日請求上限。
+- **查無資料**: 確認股票代碼正確（台股用數字如 `2330`，美股用代號如 `AAPL`）。確認日期範圍內有交易日。
+- **MCP Server 連線失敗**: 確認 Docker 容器正在運行（`docker ps`），檢查連接埠設定。
+- **環境變數未設定**: 確認 `.env` 檔案包含 `FINMIND_TOKEN`，並已正確載入。

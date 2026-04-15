@@ -1,10 +1,23 @@
 ---
 name: webapp-testing
 description: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
+version: 0.1.0
 license: Complete terms in LICENSE.txt
 ---
 
 # Web Application Testing
+
+## Overview
+
+Toolkit for testing local web applications using Python Playwright scripts. Supports frontend verification, UI debugging, browser screenshots, and console log capture.
+
+## Execution Workflow
+
+1. **Assess the target**: Determine if it's a static HTML file, a running local server, or a server that needs to be started.
+2. **Choose approach**: Use the Decision Tree below to select the right strategy.
+3. **Reconnaissance**: Discover page elements using `examples/element_discovery.py` pattern before writing automation.
+4. **Write test script**: Use `sync_playwright()` with appropriate waits and selectors.
+5. **Execute and validate**: Run the script, capture screenshots or console output for verification.
 
 To test local web applications, write native Python Playwright scripts.
 
@@ -94,3 +107,12 @@ with sync_playwright() as p:
   - `element_discovery.py` - Discovering buttons, links, and inputs on a page
   - `static_html_automation.py` - Using file:// URLs for local HTML
   - `console_logging.py` - Capturing console logs during automation
+
+## Error Handling
+
+- **Playwright not installed**: Run `pip install playwright && playwright install chromium`.
+- **TimeoutError on page load**: Increase timeout with `page.set_default_timeout(60000)`. Check if the server is running and accessible.
+- **Element not found**: Use `page.wait_for_selector()` before interacting. Run element discovery first to verify selectors.
+- **Server not starting**: When using `with_server.py`, verify the server command works manually first. Check port conflicts with `lsof -i :<port>`.
+- **Headless mode issues**: Some pages render differently in headless mode. Use `headless=False` for debugging, then switch back to `headless=True`.
+- **stale element / page closed**: Re-query elements after navigation. Ensure `page.wait_for_load_state('networkidle')` is called after page transitions.
