@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  pa-agent-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../.env
+    environment:
+      - PANOS_HOST=${PANOS_HOST:-https://10.0.0.1}
+      - PANOS_VSYS=${PANOS_VSYS:-vsys1}
+      - PANOS_VERIFY_TLS=${PANOS_VERIFY_TLS:-true}
+      - BACKUP_DIR=/data/backups
+    volumes:
+      - backup-data:/data/backups
+    restart: unless-stopped
+
+  # Optional MinIO for S3-compatible backup storage
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    profiles:
+      - storage
+
+volumes:
+  backup-data:
+  minio-data:
