@@ -48,6 +48,12 @@ logs/
 # Test coverage
 htmlcov/
 .tox/
+
+# VirusTotal skill
+skills/VirusTotal/.env
+skills/VirusTotal/scripts/output/
+skills/VirusTotal/**/*.report.html
+skills/VirusTotal/**/*.report.pdf
 .coverage
 .coverage.*
 .cache
