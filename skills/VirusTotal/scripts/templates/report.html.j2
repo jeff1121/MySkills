@@ -1,0 +1,611 @@
+{#
+  VirusTotal 掃描報告模板。
+  以單一 `report` 變數（ReportData 實例）渲染；可直接存取其屬性與 property。
+  所有樣式採內嵌 CSS，離線可用且對 weasyprint 友善（未引用任何外部 CDN 或字型）。
+#}
+{# 判定代碼對應的繁體中文標籤（供概況統計的鍵值顯示） #}
+{% set verdict_labels = {
+    "malicious": "惡意",
+    "suspicious": "可疑",
+    "harmless": "安全",
+    "unknown": "未知",
+} %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VirusTotal 掃描報告</title>
+  <style>
+    /* 頁面設定：A4 直式，適合 weasyprint 轉出 PDF */
+    @page {
+      size: A4;
+      margin: 1.6cm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "Helvetica Neue", "PingFang TC", "Microsoft JhengHei",
+                   "Noto Sans CJK TC", Arial, sans-serif;
+      color: #1f2933;
+      background: #ffffff;
+      line-height: 1.5;
+      font-size: 12px;
+      margin: 0;
+    }
+
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* 報告表頭 */
+    .report-header {
+      border-bottom: 3px solid #1f2933;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .report-header h1 {
+      font-size: 22px;
+      margin: 0 0 6px 0;
+    }
+    .report-meta {
+      color: #52606d;
+      font-size: 11px;
+      margin: 2px 0;
+    }
+
+    /* 判定徽章：依判定代碼套用不同底色 */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 10px;
+      color: #ffffff;
+      font-weight: bold;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    .badge-malicious  { background: #c0392b; }  /* 惡意：紅 */
+    .badge-suspicious { background: #e67e22; }  /* 可疑：橘 */
+    .badge-harmless   { background: #27ae60; }  /* 安全：綠 */
+    .badge-unknown    { background: #7f8c8d; }  /* 未知：灰 */
+
+    /* 概況統計區塊 */
+    .summary-section { margin: 16px 0 20px 0; }
+    .summary-section h2 {
+      font-size: 15px;
+      margin: 0 0 8px 0;
+    }
+    .stat-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .stat-card {
+      border: 1px solid #e4e7eb;
+      border-left-width: 5px;
+      border-radius: 6px;
+      padding: 8px 14px;
+      min-width: 96px;
+    }
+    .stat-card.stat-malicious  { border-left-color: #c0392b; }
+    .stat-card.stat-suspicious { border-left-color: #e67e22; }
+    .stat-card.stat-harmless   { border-left-color: #27ae60; }
+    .stat-card.stat-unknown    { border-left-color: #7f8c8d; }
+    .stat-label { display: block; color: #616e7c; font-size: 11px; }
+    .stat-num   { display: block; font-size: 20px; font-weight: bold; }
+
+    /* 逐筆結果卡片 */
+    .result-card {
+      border: 1px solid #e4e7eb;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      page-break-inside: avoid;
+    }
+    .result-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .result-target { font-size: 13px; word-break: break-all; }
+    .target-type {
+      display: inline-block;
+      background: #f0f4f8;
+      color: #334e68;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 10px;
+      text-transform: uppercase;
+      margin-right: 6px;
+    }
+
+    /* 錯誤訊息區塊 */
+    .error-box {
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      color: #a02622;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 8px 0;
+      font-size: 11px;
+      word-break: break-word;
+    }
+
+    /* 統計表格 */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 11px;
+    }
+    .stats-table { margin: 6px 0 10px 0; max-width: 360px; }
+    .stats-table th, .stats-table td {
+      border: 1px solid #e4e7eb;
+      padding: 4px 8px;
+      text-align: left;
+    }
+    .stats-table th { background: #f5f7fa; width: 55%; }
+    .stats-table td { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* 引擎明細（可摺疊） */
+    details.engines {
+      margin: 6px 0;
+      border: 1px solid #e4e7eb;
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    details.engines summary {
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 12px;
+    }
+    .engine-table { margin-top: 8px; }
+    .engine-table th, .engine-table td {
+      border-bottom: 1px solid #eef1f4;
+      padding: 3px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .engine-table th { background: #f5f7fa; }
+    .engine-table td.cat-malicious  { color: #c0392b; font-weight: bold; }
+    .engine-table td.cat-suspicious { color: #e67e22; font-weight: bold; }
+    .engine-table td.cat-harmless   { color: #27ae60; }
+
+    .permalink { margin: 8px 0 0 0; font-size: 11px; }
+
+    /* 頁尾 */
+    .report-footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid #e4e7eb;
+      color: #7b8794;
+      font-size: 10px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  {# ===== 報告表頭 ===== #}
+  <header class="report-header">
+    <h1>VirusTotal 掃描報告</h1>
+    <p class="report-meta">產生時間：{{ report.generated_at }}</p>
+    <p class="report-meta">
+      總體判定：
+      <span class="badge badge-{{ report.summary_verdict }}">
+        {{ report.summary_verdict_label }}
+      </span>
+    </p>
+  </header>
+
+  {# ===== 概況統計 ===== #}
+  <section class="summary-section">
+    <h2>概況統計</h2>
+    <div class="stat-grid">
+      {% for code, num in report.counts.items() %}
+      <div class="stat-card stat-{{ code }}">
+        <span class="stat-label">{{ verdict_labels.get(code, code) }}</span>
+        <span class="stat-num">{{ num }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ===== 逐筆結果 ===== #}
+  <section class="results-section">
+    <h2>逐筆結果（共 {{ report.results | length }} 筆）</h2>
+    {% for r in report.results %}
+    <article class="result-card">
+      <div class="result-head">
+        <div class="result-target">
+          <span class="target-type">{{ r.target.type }}</span>
+          {{ r.target.value }}
+        </div>
+        <span class="badge badge-{{ r.verdict }}">{{ r.verdict_label }}</span>
+      </div>
+
+      {# 錯誤情境：查詢失敗時顯示錯誤訊息 #}
+      {% if r.error %}
+      <div class="error-box">
+        <strong>查詢發生錯誤：</strong>{{ r.error }}
+      </div>
+      {% endif %}
+
+      {# 引擎判定統計 #}
+      {% if r.stats %}
+      <table class="stats-table">
+        <tr><th>惡意 (malicious)</th><td>{{ r.stats.malicious }}</td></tr>
+        <tr><th>可疑 (suspicious)</th><td>{{ r.stats.suspicious }}</td></tr>
+        <tr><th>安全 (harmless)</th><td>{{ r.stats.harmless }}</td></tr>
+        <tr><th>未偵測 (undetected)</th><td>{{ r.stats.undetected }}</td></tr>
+        <tr><th>逾時 (timeout)</th><td>{{ r.stats.timeout }}</td></tr>
+        <tr><th>總計 (total)</th><td>{{ r.stats.total }}</td></tr>
+      </table>
+      {% endif %}
+
+      {# 引擎明細（摺疊區塊）：引擎數量多時仍可逐列閱讀 #}
+      {% if r.engines %}
+      <details class="engines">
+        <summary>引擎明細（{{ r.engines | length }} 家）</summary>
+        <table class="engine-table">
+          <thead>
+            <tr><th>引擎</th><th>類別</th><th>結果</th></tr>
+          </thead>
+          <tbody>
+            {% for name, info in r.engines.items() %}
+            <tr>
+              <td>{{ name }}</td>
+              <td class="cat-{{ info.category if info.category else 'unknown' }}">
+                {{ info.category if info.category else "—" }}
+              </td>
+              <td>{{ info.result if info.result else "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% endif %}
+
+      {# VirusTotal 永久連結 #}
+      {% if r.permalink %}
+      <p class="permalink">
+        <a href="{{ r.permalink }}">在 VirusTotal 檢視 →</a>
+      </p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+
+  {# ===== 頁尾 ===== #}
+  <footer class="report-footer">
+    <p>本報告由 VirusTotal Skill 產生。</p>
+    <p>資料來源：VirusTotal（https://www.virustotal.com）</p>
+  </footer>
+</body>
+</html>
+{#
+  VirusTotal 掃描報告模板。
+
+  以單一 `report` 變數（ReportData 實例）渲染，可直接存取其屬性與 property：
+    - report.generated_at          產生時間字串
+    - report.summary_verdict       總體判定代碼（malicious / suspicious / harmless / unknown）
+    - report.summary_verdict_label 總體判定中文標籤
+    - report.counts                各判定代碼 → 目標數量（dict）
+    - report.results               逐筆 ScanResult 清單
+
+  內嵌 CSS 皆為離線資源，未引用任何外部 CDN 或字型連結，方便 weasyprint 轉 PDF。
+#}
+{# 判定代碼對應中文標籤，供概況統計顯示 #}
+{% set verdict_labels = {"malicious": "惡意", "suspicious": "可疑", "harmless": "安全", "unknown": "未知"} %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VirusTotal 掃描報告</title>
+  <style>
+    /* 版面基礎：以 A4 為預設頁面，字型使用系統既有中文字型，避免外部相依 */
+    @page {
+      size: A4;
+      margin: 1.6cm;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      color: #1f2933;
+      font-family: "Helvetica Neue", "PingFang TC", "Microsoft JhengHei",
+        "Noto Sans CJK TC", "Heiti TC", sans-serif;
+      font-size: 12px;
+      line-height: 1.6;
+      background: #ffffff;
+    }
+    h1, h2, h3 {
+      margin: 0 0 0.4em;
+      font-weight: 700;
+    }
+    /* 報告表頭 */
+    .report-header {
+      border-bottom: 3px solid #1f2933;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .report-header h1 {
+      font-size: 22px;
+    }
+    .report-meta {
+      color: #52606d;
+      font-size: 12px;
+    }
+    /* 判定徽章：以背景色區分嚴重程度 */
+    .badge {
+      display: inline-block;
+      padding: 2px 12px;
+      border-radius: 12px;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .badge-malicious {
+      background: #c0392b;
+    }
+    .badge-suspicious {
+      background: #e67e22;
+    }
+    .badge-harmless {
+      background: #27ae60;
+    }
+    .badge-unknown {
+      background: #7f8c8d;
+    }
+    .summary-badge {
+      font-size: 14px;
+      padding: 4px 16px;
+    }
+    /* 概況統計卡片 */
+    .stats-overview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .stat-chip {
+      flex: 1 1 120px;
+      border: 1px solid #e4e7eb;
+      border-left-width: 5px;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #f5f7fa;
+    }
+    .stat-chip.stat-malicious {
+      border-left-color: #c0392b;
+    }
+    .stat-chip.stat-suspicious {
+      border-left-color: #e67e22;
+    }
+    .stat-chip.stat-harmless {
+      border-left-color: #27ae60;
+    }
+    .stat-chip.stat-unknown {
+      border-left-color: #7f8c8d;
+    }
+    .stat-chip .stat-label {
+      display: block;
+      color: #52606d;
+      font-size: 11px;
+    }
+    .stat-chip .stat-num {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    /* 逐筆結果卡片 */
+    .result-card {
+      border: 1px solid #e4e7eb;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+    }
+    .result-card .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .target-type {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 4px;
+      background: #d9e2ec;
+      color: #334e68;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-right: 6px;
+    }
+    .target-value {
+      word-break: break-all;
+      font-family: "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+      font-size: 12px;
+    }
+    /* 錯誤訊息區塊 */
+    .error-box {
+      background: #fdecea;
+      border: 1px solid #f5b7b1;
+      color: #922b21;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 8px 0;
+    }
+    /* 統計表格 */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8px 0;
+    }
+    .stats-table th,
+    .stats-table td {
+      border: 1px solid #e4e7eb;
+      padding: 4px 10px;
+      text-align: left;
+    }
+    .stats-table th {
+      background: #f5f7fa;
+      width: 45%;
+      font-weight: 600;
+    }
+    /* 引擎明細 */
+    details.engines {
+      margin-top: 10px;
+      border: 1px solid #e4e7eb;
+      border-radius: 6px;
+      padding: 6px 10px;
+      background: #fafbfc;
+    }
+    details.engines summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #334e68;
+    }
+    .engine-table th,
+    .engine-table td {
+      border-bottom: 1px solid #eceff1;
+      padding: 3px 8px;
+      text-align: left;
+      font-size: 11px;
+    }
+    .engine-table th {
+      color: #52606d;
+      border-bottom: 2px solid #cbd2d9;
+    }
+    .engine-table .cat-malicious {
+      color: #c0392b;
+      font-weight: 700;
+    }
+    .engine-table .cat-suspicious {
+      color: #e67e22;
+      font-weight: 700;
+    }
+    /* VirusTotal 連結 */
+    .permalink {
+      margin: 10px 0 0;
+    }
+    .permalink a {
+      color: #2456a6;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    /* 頁尾 */
+    footer.report-footer {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid #e4e7eb;
+      color: #7b8794;
+      font-size: 11px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  {# ── 報告表頭 ── #}
+  <header class="report-header">
+    <h1>VirusTotal 掃描報告</h1>
+    <p class="report-meta">
+      產生時間：{{ report.generated_at }}
+      &nbsp;·&nbsp;
+      總體判定：
+      <span class="badge summary-badge badge-{{ report.summary_verdict }}">
+        {{ report.summary_verdict_label }}
+      </span>
+    </p>
+  </header>
+
+  {# ── 概況統計：各判定的目標數量 ── #}
+  <section>
+    <h2>概況統計</h2>
+    <div class="stats-overview">
+      {% for code, num in report.counts.items() %}
+      <div class="stat-chip stat-{{ code }}">
+        <span class="stat-label">{{ verdict_labels.get(code, code) }}</span>
+        <span class="stat-num">{{ num }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="report-meta">目標總數：{{ report.results | length }}</p>
+  </section>
+
+  {# ── 逐筆結果 ── #}
+  <section>
+    <h2>逐筆結果</h2>
+    {% for r in report.results %}
+    <article class="result-card">
+      <div class="card-head">
+        <div>
+          <span class="target-type">{{ r.target.type }}</span>
+          <span class="target-value">{{ r.target.value }}</span>
+        </div>
+        <span class="badge badge-{{ r.verdict }}">{{ r.verdict_label }}</span>
+      </div>
+
+      {# 錯誤訊息（若有） #}
+      {% if r.error %}
+      <div class="error-box">
+        <strong>錯誤：</strong>{{ r.error }}
+      </div>
+      {% endif %}
+
+      {# 引擎判定統計（若有） #}
+      {% if r.stats %}
+      <table class="stats-table">
+        <tr><th>惡意（malicious）</th><td>{{ r.stats.malicious }}</td></tr>
+        <tr><th>可疑（suspicious）</th><td>{{ r.stats.suspicious }}</td></tr>
+        <tr><th>安全（harmless）</th><td>{{ r.stats.harmless }}</td></tr>
+        <tr><th>未偵測（undetected）</th><td>{{ r.stats.undetected }}</td></tr>
+        <tr><th>逾時（timeout）</th><td>{{ r.stats.timeout }}</td></tr>
+        <tr><th>總計（total）</th><td>{{ r.stats.total }}</td></tr>
+      </table>
+      {% endif %}
+
+      {# 引擎明細：以摺疊區塊呈現，引擎眾多時仍可閱讀 #}
+      {% if r.engines %}
+      <details class="engines">
+        <summary>引擎明細（共 {{ r.engines | length }} 個引擎）</summary>
+        <table class="engine-table">
+          <thead>
+            <tr><th>引擎</th><th>類別</th><th>結果</th></tr>
+          </thead>
+          <tbody>
+            {% for name, info in r.engines.items() %}
+            <tr>
+              <td>{{ name }}</td>
+              <td class="cat-{{ info.category if info.category else 'unknown' }}">
+                {{ info.category if info.category else "—" }}
+              </td>
+              <td>{{ info.result if info.result else "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% endif %}
+
+      {# VirusTotal 原始頁面連結（若有） #}
+      {% if r.permalink %}
+      <p class="permalink">
+        <a href="{{ r.permalink }}">在 VirusTotal 檢視 →</a>
+      </p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+
+  {# ── 頁尾 ── #}
+  <footer class="report-footer">
+    <p>本報告由 VirusTotal Skill 產生。</p>
+    <p>資料來源：VirusTotal（https://www.virustotal.com）</p>
+  </footer>
+</body>
+</html>

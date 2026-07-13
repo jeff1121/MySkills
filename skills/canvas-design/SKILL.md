@@ -1,14 +1,19 @@
 ---
 name: canvas-design
 description: Design philosophy-driven visual art creation. For posters, artworks, graphic design, and other static visual outputs. Produce original designs without copying existing artworks. Output .md (design philosophy) + .pdf or .png (canvas).
+version: 0.1.0
 ---
 
 # Canvas Design Skill
 
+## Overview
+
 Visual expression driven by design philosophy: establish an aesthetic movement manifesto first, then transform it into artwork on the canvas.
 Output only `.md`, `.pdf`, `.png` files.
 
-Process divided into two stages:
+## Execution Workflow
+
+Process divided into four stages:
 1. **Design Philosophy Establishment** (.md file)
 2. **Canvas Creation** (.pdf or .png file)
 
@@ -184,3 +189,11 @@ After refinement complete, check each item:
 - [ ] **Font Loading**: All typography correctly loaded and rendered
 - [ ] **Color Consistency**: Color palette maintains unity throughout work
 - [ ] **File Integrity**: Output .pdf/.png opens properly without corruption
+
+## Error Handling
+
+- **Font not loading**: Verify font file exists in `canvas-fonts/` and path is correct. Fall back to system fonts if custom font unavailable.
+- **Canvas overflow**: Elements outside safe area — revisit Boundary and Element Rules and reduce element sizes or margins.
+- **Color rendering mismatch**: Check color space (RGB for screen, CMYK for print). Ensure hex values match design philosophy palette.
+- **File output corruption**: Verify canvas dimensions are valid, re-export with explicit DPI setting (recommended: 300 DPI for print, 150 DPI for screen).
+- **CJK text rendering issues**: Use Noto Sans CJK or similar CJK-compatible fonts. Ensure font supports the required Unicode ranges.

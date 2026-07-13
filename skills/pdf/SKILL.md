@@ -1,6 +1,7 @@
 ---
 name: pdf
 description: Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.
+version: 1.0.0
 license: Proprietary. LICENSE.txt has complete terms
 ---
 
@@ -292,3 +293,20 @@ with open("encrypted.pdf", "wb") as output:
 - For JavaScript libraries (pdf-lib), see reference.md
 - If you need to fill out a PDF form, follow the instructions in forms.md
 - For troubleshooting guides, see reference.md
+
+## Execution Workflow
+
+1. **Identify the task type**: Extract text/tables, fill forms, merge/split, create new, or convert.
+2. **Select the right library**: pypdf (basic ops), pdfplumber (extraction), reportlab (creation), pdf-lib (forms via JS).
+3. **Install dependencies**: `pip install -r scripts/requirements.txt` or refer to pyproject.toml.
+4. **Run the appropriate script** from `scripts/` or use the library API directly.
+5. **Validate output**: Open the generated PDF, verify content integrity and formatting.
+
+## Error Handling
+
+- **FileNotFoundError**: Verify the input PDF path exists and is readable.
+- **Encrypted/password-protected PDF**: Use `pypdf` with `reader.decrypt(password)` before processing.
+- **Empty text extraction**: The PDF may be scanned images — use OCR workflow (pytesseract + pdf2image).
+- **Form field not fillable**: Check if the PDF has actual form fields with `scripts/check_fillable_fields.py`. If not, use annotation-based filling via `scripts/fill_pdf_form_with_annotations.py`.
+- **Large PDF performance**: For PDFs > 500 pages, process in batches. Use `MAX_FORM_FIELDS` limit in `scripts/common.py`.
+- **Encoding issues**: Ensure fonts are embedded. For CJK text, use fonts with full Unicode coverage.

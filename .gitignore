@@ -48,6 +48,12 @@ logs/
 # Test coverage
 htmlcov/
 .tox/
+
+# VirusTotal skill
+skills/VirusTotal/.env
+skills/VirusTotal/scripts/output/
+skills/VirusTotal/**/*.report.html
+skills/VirusTotal/**/*.report.pdf
 .coverage
 .coverage.*
 .cache
@@ -63,7 +69,18 @@ coverage.xml
 cluster.yaml
 **/cluster.yaml
 
+# Node.js
+node_modules/
+package-lock.json
+
 # Temporary files
 tmp/
 temp/
 *.tmp
+
+# Test output artifacts
+skills/video-downloader/test-output/
+
+# Skill installation logs
+*.install.log
+elk-install.log

@@ -54,6 +54,7 @@ from models import ConnectionInfo, InstallOptions
 @click.option("--json-output", is_flag=True, default=False)
 @click.option("--yes", "-y", is_flag=True, default=False)
 @click.option("--verbose", is_flag=True, default=False)
+@click.option("--dry-run", is_flag=True, default=False, help="Preview mode: show steps without executing")
 def install(
     host: str,
     port: int,
@@ -77,6 +78,7 @@ def install(
     json_output: bool,
     yes: bool,
     verbose: bool,
+    dry_run: bool,
 ) -> None:
     """Install Elastic Stack on a remote host via SSH."""
     connection = ConnectionInfo(
@@ -108,6 +110,10 @@ def install(
     if errors:
         _output_error("Invalid options", "; ".join(errors), json_output)
         sys.exit(1)
+
+    if dry_run:
+        _show_dry_run(options, json_output)
+        sys.exit(0)
 
     if not yes and not json_output:
         if not _confirm_options(options):
@@ -174,6 +180,57 @@ def _output_error(message: str, error: Optional[str], json_output: bool) -> None
     click.echo(f"\nError: {message}", err=True)
     if error:
         click.echo(f"Details: {error}", err=True)
+
+
+def _show_dry_run(options: InstallOptions, json_output: bool) -> None:
+    """Show dry-run preview of installation steps."""
+    steps = [
+        "1. Detect OS family and configure package repository",
+        "2. Update system packages",
+        "3. Install prerequisites",
+        f"4. Install Elasticsearch {options.elastic_major}.x",
+        "5. Configure Elasticsearch (bind, heap, cluster)",
+        "6. Start Elasticsearch and generate passwords",
+        f"7. Install Kibana {options.elastic_major}.x",
+        "8. Configure Kibana (server.host, elasticsearch connection)",
+        "9. Start Kibana",
+        f"10. Install Logstash {options.elastic_major}.x",
+        "11. Configure Logstash pipeline and keystore",
+        "12. Start Logstash",
+        "13. Install Fleet Server (Elastic Agent)",
+        "14. Register Fleet Server with Kibana",
+    ]
+    if options.open_firewall:
+        steps.append("15. Open firewall ports (9200, 5601, 5044, 8220)")
+    if not options.skip_tests:
+        steps.append(f"{len(steps) + 1}. Run connectivity tests")
+
+    if json_output:
+        info = {
+            "dry_run": True,
+            "target": str(options.connection),
+            "elastic_major": options.elastic_major,
+            "cluster_name": options.cluster_name,
+            "node_mode": options.node_mode,
+            "open_firewall": options.open_firewall,
+            "steps": steps,
+        }
+        click.echo(json.dumps(info, ensure_ascii=True, indent=2))
+    else:
+        click.echo("\n🔍 Dry-run mode — the following steps would be executed:\n")
+        click.echo(f"  Target: {options.connection}")
+        click.echo(f"  Elastic version: {options.elastic_major}.x")
+        click.echo(f"  Cluster: {options.cluster_name} ({options.node_mode})")
+        click.echo(f"  Bind: {options.bind_host}:{options.http_port}")
+        click.echo(f"  Kibana: {options.kibana_host}:{options.kibana_port}")
+        click.echo(f"  Logstash: port {options.logstash_port}")
+        click.echo(f"  Fleet Server: {options.fleet_server_host}:{options.fleet_server_port}")
+        click.echo(f"  Heap: {options.heap_size}")
+        click.echo(f"  Firewall: {'open' if options.open_firewall else 'no change'}")
+        click.echo("\n  Steps:")
+        for step in steps:
+            click.echo(f"    {step}")
+        click.echo("\n  ⚠️  No changes will be made. Remove --dry-run to install.")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 ---
 name: pptx
 description: "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks"
+version: 1.0.0
 license: Proprietary. LICENSE.txt has complete terms
 ---
 
@@ -482,3 +483,12 @@ Required dependencies (should already be installed):
 - **LibreOffice**: `sudo apt-get install libreoffice` (for PDF conversion)
 - **Poppler**: `sudo apt-get install poppler-utils` (for pdftoppm to convert PDF to images)
 - **defusedxml**: `pip install defusedxml` (for secure XML parsing)
+
+## Error Handling
+
+- **ModuleNotFoundError**: Install missing dependencies listed in Dependencies section above.
+- **Corrupt .pptx file**: Use `ooxml/scripts/validate.py` to check XML schema compliance. Try unpacking and repacking with `unpack.py` / `pack.py`.
+- **Font rendering issues**: PowerPoint embeds fonts differently per platform. Use web-safe fonts (Arial, Calibri) for maximum compatibility, or embed fonts explicitly.
+- **Slide layout mismatch**: When editing existing files, use `scripts/inventory.py` to discover available layouts and master slides before applying changes.
+- **Image quality loss**: Use high-resolution source images (300 DPI+). Avoid repeated pack/unpack cycles on images.
+- **HTML2PPTX conversion failure**: Ensure Node.js dependencies (pptxgenjs, playwright) are installed globally. Check `html2pptx.md` for troubleshooting.
